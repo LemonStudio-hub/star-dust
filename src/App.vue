@@ -24,10 +24,14 @@ let currentRotation = new THREE.Vector2()
 let hammer: Hammer.Manager | null = null
 let time = 0
 
+// 预计算的3D噪声纹理数据 - 存储完整的XYZ向量
+let noiseTexture3D: Float32Array
+const TEXTURE_SIZE = 64
+const TEXTURE_VOLUME = TEXTURE_SIZE * TEXTURE_SIZE * TEXTURE_SIZE
+
 const PARTICLE_COUNT = 30000
 const PARTICLE_SIZE = 1.2
 
-// Simplex Noise 实现
 class SimplexNoise {
   constructor() {
     this.grad3 = [
@@ -143,12 +147,11 @@ class SimplexNoise {
   }
 }
 
-// 分形布朗运动（FBM）噪声场 - 突出高频细节
 class FBMNoise {
   private simplex: SimplexNoise
   private octaves: number
-  private persistence: number  // 振幅衰减系数，增大让高频更突出
-  private lacunarity: number   // 频率增长系数，增大让高频更突出
+  private persistence: number
+  private lacunarity: number
 
   constructor(octaves: number = 6, persistence: number = 0.65, lacunarity: number = 2.5) {
     this.simplex = new SimplexNoise()
@@ -157,7 +160,6 @@ class FBMNoise {
     this.lacunarity = lacunarity
   }
 
-  // 3D FBM 噪声
   noise(x: number, y: number, z: number): number {
     let total = 0
     let frequency = 1
@@ -175,42 +177,96 @@ class FBMNoise {
   }
 }
 
-// Curl Noise - 矢量噪声生成器
-class CurlNoise {
-  private fbm: FBMNoise
-  private epsilon: number
-
-  constructor() {
-    // 使用更高频细节的FBM参数
-    this.fbm = new FBMNoise(6, 0.65, 2.5)
-    this.epsilon = 0.01
+function precomputeNoiseTexture(): Float32Array {
+  console.log('开始预计算3D噪声纹理...')
+  const startTime = performance.now()
+  
+  const fbm = new FBMNoise(6, 0.65, 2.5)
+  
+  // 存储三个标量噪声场
+  const data1 = new Float32Array(TEXTURE_VOLUME)
+  const data2 = new Float32Array(TEXTURE_VOLUME)
+  const data3 = new Float32Array(TEXTURE_VOLUME)
+  
+  for (let z = 0; z < TEXTURE_SIZE; z++) {
+    for (let y = 0; y < TEXTURE_SIZE; y++) {
+      for (let x = 0; x < TEXTURE_SIZE; x++) {
+        const idx = x + y * TEXTURE_SIZE + z * TEXTURE_SIZE * TEXTURE_SIZE
+        
+        const nx = x / TEXTURE_SIZE
+        const ny = y / TEXTURE_SIZE
+        const nz = z / TEXTURE_SIZE
+        
+        data1[idx] = fbm.noise(nx * 4, ny * 4, nz * 4)
+        data2[idx] = fbm.noise(nx * 4 + 100, ny * 4 + 100, nz * 4 + 100)
+        data3[idx] = fbm.noise(nx * 4 + 200, ny * 4 + 200, nz * 4 + 200)
+      }
+    }
   }
-
-  // 计算单个标量噪声场的旋度，生成无散度矢量场
-  curl(x: number, y: number, z: number, time: number): { x: number; y: number; z: number } {
-    // 使用三个不同相位的标量噪声场来生成矢量场
-    const psi1 = (x: number, y: number, z: number) => this.fbm.noise(x, y, z)
-    const psi2 = (x: number, y: number, z: number) => this.fbm.noise(x + 100, y + 100, z + 100)
-    const psi3 = (x: number, y: number, z: number) => this.fbm.noise(x + 200, y + 200, z + 200)
-
-    // 计算旋度：∇ × ψ
-    // (∂ψ3/∂y - ∂ψ2/∂z, ∂ψ1/∂z - ∂ψ3/∂x, ∂ψ2/∂x - ∂ψ1/∂y)
-    const t = time * 0.0001
-
-    const curlX = (psi3(x, y + this.epsilon, z, t) - psi3(x, y - this.epsilon, z, t)) / (2 * this.epsilon) -
-                 (psi2(x, y, z + this.epsilon, t) - psi2(x, y, z - this.epsilon, t)) / (2 * this.epsilon)
-
-    const curlY = (psi1(x, y, z + this.epsilon, t) - psi1(x, y, z - this.epsilon, t)) / (2 * this.epsilon) -
-                 (psi3(x + this.epsilon, y, z, t) - psi3(x - this.epsilon, y, z, t)) / (2 * this.epsilon)
-
-    const curlZ = (psi2(x + this.epsilon, y, z, t) - psi2(x - this.epsilon, y, z, t)) / (2 * this.epsilon) -
-                 (psi1(x, y + this.epsilon, z, t) - psi1(x, y - this.epsilon, z, t)) / (2 * this.epsilon)
-
-    return { x: curlX, y: curlY, z: curlZ }
+  
+  // 存储完整的Curl向量场 (3个分量)
+  const curlData = new Float32Array(TEXTURE_VOLUME * 3)
+  const epsilon = 1
+  
+  for (let z = 0; z < TEXTURE_SIZE; z++) {
+    for (let y = 0; y < TEXTURE_SIZE; y++) {
+      for (let x = 0; x < TEXTURE_SIZE; x++) {
+        const idx = x + y * TEXTURE_SIZE + z * TEXTURE_SIZE * TEXTURE_SIZE
+        
+        const xp1 = Math.min(x + 1, TEXTURE_SIZE - 1)
+        const xm1 = Math.max(x - 1, 0)
+        const yp1 = Math.min(y + 1, TEXTURE_SIZE - 1)
+        const ym1 = Math.max(y - 1, 0)
+        const zp1 = Math.min(z + 1, TEXTURE_SIZE - 1)
+        const zm1 = Math.max(z - 1, 0)
+        
+        const idx_xp1 = xp1 + y * TEXTURE_SIZE + z * TEXTURE_SIZE * TEXTURE_SIZE
+        const idx_xm1 = xm1 + y * TEXTURE_SIZE + z * TEXTURE_SIZE * TEXTURE_SIZE
+        const idx_yp1 = x + yp1 * TEXTURE_SIZE + z * TEXTURE_SIZE * TEXTURE_SIZE
+        const idx_ym1 = x + ym1 * TEXTURE_SIZE + z * TEXTURE_SIZE * TEXTURE_SIZE
+        const idx_zp1 = x + y * TEXTURE_SIZE + zp1 * TEXTURE_SIZE * TEXTURE_SIZE
+        const idx_zm1 = x + y * TEXTURE_SIZE + zm1 * TEXTURE_SIZE * TEXTURE_SIZE
+        
+        const curlX = (data3[idx_yp1] - data3[idx_ym1]) / (2 * epsilon) -
+                      (data2[idx_zp1] - data2[idx_zm1]) / (2 * epsilon)
+        const curlY = (data1[idx_zp1] - data1[idx_zm1]) / (2 * epsilon) -
+                      (data3[idx_xp1] - data3[idx_xm1]) / (2 * epsilon)
+        const curlZ = (data2[idx_xp1] - data2[idx_xm1]) / (2 * epsilon) -
+                      (data1[idx_yp1] - data1[idx_ym1]) / (2 * epsilon)
+        
+        curlData[idx] = curlX
+        curlData[idx + TEXTURE_VOLUME] = curlY
+        curlData[idx + TEXTURE_VOLUME * 2] = curlZ
+      }
+    }
   }
+  
+  const elapsed = performance.now() - startTime
+  console.log(`3D噪声纹理预计算完成，耗时: ${elapsed.toFixed(2)}ms`)
+  
+  return curlData
 }
 
-const curlNoise = new CurlNoise()
+function sampleNoiseTexture(x: number, y: number, z: number, time: number): { x: number; y: number; z: number } {
+  const scale = 0.008
+  const timeScale = 0.0001
+  
+  const nx = ((x * scale) % 1 + 1) % 1
+  const ny = ((y * scale) % 1 + 1) % 1
+  const nz = ((z * scale + time * timeScale) % 1 + 1) % 1
+  
+  const tx = Math.floor(nx * (TEXTURE_SIZE - 1))
+  const ty = Math.floor(ny * (TEXTURE_SIZE - 1))
+  const tz = Math.floor(nz * (TEXTURE_SIZE - 1))
+  
+  const idx = tx + ty * TEXTURE_SIZE + tz * TEXTURE_SIZE * TEXTURE_SIZE
+  
+  return {
+    x: noiseTexture3D[idx],
+    y: noiseTexture3D[idx + TEXTURE_VOLUME],
+    z: noiseTexture3D[idx + TEXTURE_VOLUME * 2]
+  }
+}
 
 const createParticles = () => {
   const geometry = new THREE.BufferGeometry()
@@ -276,8 +332,6 @@ const updateParticles = () => {
   const positions = particles.geometry.attributes.position.array as Float32Array
   const len = positions.length
 
-  // Curl Noise 参数
-  const scale = 0.008
   const velocityScale = 0.08
 
   for (let i = 0; i < len; i += 3) {
@@ -285,15 +339,12 @@ const updateParticles = () => {
     const y = positions[i + 1]
     const z = positions[i + 2]
 
-    // 使用 Curl Noise 生成矢量场
-    const curl = curlNoise.curl(x * scale, y * scale, z * scale, time)
+    const curl = sampleNoiseTexture(x, y, z, time)
 
-    // 更新速度 - 使用矢量噪声
     particleVelocities[i] += curl.x * velocityScale
     particleVelocities[i + 1] += curl.y * velocityScale
     particleVelocities[i + 2] += curl.z * velocityScale
 
-    // 限制速度
     const speed = Math.sqrt(
       particleVelocities[i] * particleVelocities[i] +
       particleVelocities[i + 1] * particleVelocities[i + 1] +
@@ -308,12 +359,10 @@ const updateParticles = () => {
       particleVelocities[i + 2] *= factor
     }
 
-    // 更新位置
     positions[i] += particleVelocities[i]
     positions[i + 1] += particleVelocities[i + 1]
     positions[i + 2] += particleVelocities[i + 2]
 
-    // 边界检测
     const distSq = x * x + y * y + z * z
     if (distSq > 3600) {
       positions[i] *= 0.1
@@ -442,6 +491,8 @@ onMounted(() => {
   renderer.outputColorSpace = THREE.SRGBColorSpace
   renderer.toneMapping = THREE.ACESFilmicToneMapping
   renderer.toneMappingExposure = 1.0
+
+  noiseTexture3D = precomputeNoiseTexture()
 
   createParticles()
 
