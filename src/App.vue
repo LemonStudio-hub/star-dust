@@ -143,14 +143,14 @@ class SimplexNoise {
   }
 }
 
-// 分形布朗运动（FBM）噪声场
+// 分形布朗运动（FBM）噪声场 - 突出高频细节
 class FBMNoise {
   private simplex: SimplexNoise
   private octaves: number
-  private persistence: number
-  private lacunarity: number
+  private persistence: number  // 振幅衰减系数，增大让高频更突出
+  private lacunarity: number   // 频率增长系数，增大让高频更突出
 
-  constructor(octaves: number = 4, persistence: number = 0.5, lacunarity: number = 2.0) {
+  constructor(octaves: number = 6, persistence: number = 0.65, lacunarity: number = 2.5) {
     this.simplex = new SimplexNoise()
     this.octaves = octaves
     this.persistence = persistence
@@ -175,7 +175,42 @@ class FBMNoise {
   }
 }
 
-const fbmNoise = new FBMNoise(4, 0.5, 2.0)
+// Curl Noise - 矢量噪声生成器
+class CurlNoise {
+  private fbm: FBMNoise
+  private epsilon: number
+
+  constructor() {
+    // 使用更高频细节的FBM参数
+    this.fbm = new FBMNoise(6, 0.65, 2.5)
+    this.epsilon = 0.01
+  }
+
+  // 计算单个标量噪声场的旋度，生成无散度矢量场
+  curl(x: number, y: number, z: number, time: number): { x: number; y: number; z: number } {
+    // 使用三个不同相位的标量噪声场来生成矢量场
+    const psi1 = (x: number, y: number, z: number) => this.fbm.noise(x, y, z)
+    const psi2 = (x: number, y: number, z: number) => this.fbm.noise(x + 100, y + 100, z + 100)
+    const psi3 = (x: number, y: number, z: number) => this.fbm.noise(x + 200, y + 200, z + 200)
+
+    // 计算旋度：∇ × ψ
+    // (∂ψ3/∂y - ∂ψ2/∂z, ∂ψ1/∂z - ∂ψ3/∂x, ∂ψ2/∂x - ∂ψ1/∂y)
+    const t = time * 0.0001
+
+    const curlX = (psi3(x, y + this.epsilon, z, t) - psi3(x, y - this.epsilon, z, t)) / (2 * this.epsilon) -
+                 (psi2(x, y, z + this.epsilon, t) - psi2(x, y, z - this.epsilon, t)) / (2 * this.epsilon)
+
+    const curlY = (psi1(x, y, z + this.epsilon, t) - psi1(x, y, z - this.epsilon, t)) / (2 * this.epsilon) -
+                 (psi3(x + this.epsilon, y, z, t) - psi3(x - this.epsilon, y, z, t)) / (2 * this.epsilon)
+
+    const curlZ = (psi2(x + this.epsilon, y, z, t) - psi2(x - this.epsilon, y, z, t)) / (2 * this.epsilon) -
+                 (psi1(x, y + this.epsilon, z, t) - psi1(x, y - this.epsilon, z, t)) / (2 * this.epsilon)
+
+    return { x: curlX, y: curlY, z: curlZ }
+  }
+}
+
+const curlNoise = new CurlNoise()
 
 const createParticles = () => {
   const geometry = new THREE.BufferGeometry()
@@ -241,25 +276,22 @@ const updateParticles = () => {
   const positions = particles.geometry.attributes.position.array as Float32Array
   const len = positions.length
 
-  // FBM 参数
+  // Curl Noise 参数
   const scale = 0.008
-  const timeScale = 0.00005
-  const velocityScale = 0.08  // 降低速度系数
+  const velocityScale = 0.08
 
   for (let i = 0; i < len; i += 3) {
     const x = positions[i]
     const y = positions[i + 1]
     const z = positions[i + 2]
 
-    // 使用 FBM 噪声计算 3D 向量场
-    const noiseX = fbmNoise.noise(x * scale, y * scale, time * timeScale)
-    const noiseY = fbmNoise.noise(x * scale + 100, y * scale + 100, time * timeScale + 100)
-    const noiseZ = fbmNoise.noise(x * scale + 200, y * scale + 200, time * timeScale + 200)
+    // 使用 Curl Noise 生成矢量场
+    const curl = curlNoise.curl(x * scale, y * scale, z * scale, time)
 
-    // 更新速度 - 使用降低的速度系数
-    particleVelocities[i] += noiseX * velocityScale
-    particleVelocities[i + 1] += noiseY * velocityScale
-    particleVelocities[i + 2] += noiseZ * velocityScale
+    // 更新速度 - 使用矢量噪声
+    particleVelocities[i] += curl.x * velocityScale
+    particleVelocities[i + 1] += curl.y * velocityScale
+    particleVelocities[i + 2] += curl.z * velocityScale
 
     // 限制速度
     const speed = Math.sqrt(
@@ -268,7 +300,7 @@ const updateParticles = () => {
       particleVelocities[i + 2] * particleVelocities[i + 2]
     )
 
-    const maxSpeed = 0.15  // 降低最大速度
+    const maxSpeed = 0.15
     if (speed > maxSpeed) {
       const factor = maxSpeed / speed
       particleVelocities[i] *= factor
