@@ -23,6 +23,7 @@ let targetRotation = new THREE.Vector2()
 let currentRotation = new THREE.Vector2()
 let hammer: Hammer.Manager | null = null
 let worker: Worker | null = null
+let startTime: number = 0
 
 const PARTICLE_COUNT = 30000
 const PARTICLE_SIZE = 1.2
@@ -213,6 +214,7 @@ onMounted(() => {
   // 创建 Worker
   try {
     worker = new Worker(new URL('./worker.ts', import.meta.url), { type: 'module' })
+    startTime = Date.now()
 
     // 监听 Worker 消息
     worker.onmessage = (event: MessageEvent) => {
@@ -230,15 +232,18 @@ onMounted(() => {
     // 发送初始数据到 Worker
     worker.postMessage({
       positions: particlePositions,
-      velocities: particleVelocities
+      velocities: particleVelocities,
+      time: 0
     })
 
     // 每帧向 Worker 发送数据
     const updateWorker = () => {
       if (worker && particlePositions) {
+        const currentTime = Date.now() - startTime
         worker.postMessage({
           positions: particlePositions,
-          velocities: particleVelocities
+          velocities: particleVelocities,
+          time: currentTime
         })
       }
       requestAnimationFrame(updateWorker)
@@ -249,7 +254,6 @@ onMounted(() => {
 
   } catch (error) {
     console.error('Failed to create worker:', error)
-    // 如果 Worker 创建失败，使用备用方案
   }
 
   // 添加环境光
