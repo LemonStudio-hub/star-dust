@@ -22,11 +22,16 @@ let mouse = new THREE.Vector2()
 let targetRotation = new THREE.Vector2()
 let currentRotation = new THREE.Vector2()
 let hammer: Hammer.Manager | null = null
-let worker: Worker | null = null
-let startTime: number = 0
+let time = 0
 
 const PARTICLE_COUNT = 30000
 const PARTICLE_SIZE = 1.2
+
+// 简单的噪声函数
+function noise(x: number, y: number, z: number): number {
+  const n = Math.sin(x * 12.9898 + y * 78.233 + z * 37.719) * 43758.5453
+  return (n - Math.floor(n)) * 2 - 1
+}
 
 const createParticles = () => {
   const geometry = new THREE.BufferGeometry()
@@ -35,22 +40,20 @@ const createParticles = () => {
 
   const colors = new Float32Array(PARTICLE_COUNT * 3)
 
-  // 颜色调色板
   const colorPalettes = [
-    [1.0, 0.2, 0.5],  // 玫红
-    [0.2, 0.8, 1.0],  // 天蓝
-    [1.0, 0.9, 0.2],  // 金黄
-    [0.3, 1.0, 0.5],  // 翠绿
-    [0.9, 0.2, 1.0],  // 紫色
-    [1.0, 0.4, 0.1],  // 橙红
-    [0.1, 0.9, 0.9],  // 青色
-    [1.0, 1.0, 1.0],  // 白色
+    [1.0, 0.2, 0.5],
+    [0.2, 0.8, 1.0],
+    [1.0, 0.9, 0.2],
+    [0.3, 1.0, 0.5],
+    [0.9, 0.2, 1.0],
+    [1.0, 0.4, 0.1],
+    [0.1, 0.9, 0.9],
+    [1.0, 1.0, 1.0],
   ]
 
   for (let i = 0; i < PARTICLE_COUNT; i++) {
     const i3 = i * 3
 
-    // 随机分布在球形空间内
     const radius = Math.random() * 50
     const theta = Math.random() * Math.PI * 2
     const phi = Math.acos(2 * Math.random() - 1)
@@ -59,14 +62,12 @@ const createParticles = () => {
     particlePositions[i3 + 1] = radius * Math.sin(phi) * Math.sin(theta)
     particlePositions[i3 + 2] = radius * Math.cos(phi)
 
-    // 随机初始速度
     const angle = Math.random() * Math.PI * 2
     const speed = 0.02 + Math.random() * 0.08
     particleVelocities[i3] = Math.cos(angle) * speed
     particleVelocities[i3 + 1] = Math.sin(angle) * speed
     particleVelocities[i3 + 2] = (Math.random() - 0.5) * speed
 
-    // 随机选择颜色
     const palette = colorPalettes[Math.floor(Math.random() * colorPalettes.length)]
     const brightness = 0.7 + Math.random() * 0.3
     colors[i3] = palette[0] * brightness
@@ -92,8 +93,69 @@ const createParticles = () => {
   scene.add(particles)
 }
 
+const updateParticles = () => {
+  const positions = particles.geometry.attributes.position.array as Float32Array
+  const len = positions.length
+
+  for (let i = 0; i < len; i += 3) {
+    const x = positions[i]
+    const y = positions[i + 1]
+    const z = positions[i + 2]
+
+    // 使用噪声计算力
+    const noiseX = noise(x * 0.01, y * 0.01, time * 0.0001)
+    const noiseY = noise(x * 0.01 + 100, y * 0.01 + 100, time * 0.0001 + 100)
+    const noiseZ = noise(x * 0.01 + 200, y * 0.01 + 200, time * 0.0001 + 200)
+
+    // 更新速度
+    particleVelocities[i] += noiseX * 0.5
+    particleVelocities[i + 1] += noiseY * 0.5
+    particleVelocities[i + 2] += noiseZ * 0.5
+
+    // 限制速度
+    const speed = Math.sqrt(
+      particleVelocities[i] * particleVelocities[i] +
+      particleVelocities[i + 1] * particleVelocities[i + 1] +
+      particleVelocities[i + 2] * particleVelocities[i + 2]
+    )
+
+    const maxSpeed = 0.5
+    if (speed > maxSpeed) {
+      const factor = maxSpeed / speed
+      particleVelocities[i] *= factor
+      particleVelocities[i + 1] *= factor
+      particleVelocities[i + 2] *= factor
+    }
+
+    // 更新位置
+    positions[i] += particleVelocities[i]
+    positions[i + 1] += particleVelocities[i + 1]
+    positions[i + 2] += particleVelocities[i + 2]
+
+    // 边界检测
+    const distSq = x * x + y * y + z * z
+    if (distSq > 3600) {
+      positions[i] *= 0.1
+      positions[i + 1] *= 0.1
+      positions[i + 2] *= 0.1
+
+      particleVelocities[i] = (Math.random() - 0.5) * 0.1
+      particleVelocities[i + 1] = (Math.random() - 0.5) * 0.1
+      particleVelocities[i + 2] = (Math.random() - 0.5) * 0.1
+    }
+  }
+
+  particles.geometry.attributes.position.needsUpdate = true
+}
+
 const animate = () => {
   requestAnimationFrame(animate)
+
+  // 更新时间
+  time += 16
+
+  // 更新粒子
+  updateParticles()
 
   // 平滑旋转
   currentRotation.x += (targetRotation.x - currentRotation.x) * 0.05
@@ -101,8 +163,6 @@ const animate = () => {
 
   particles.rotation.x = currentRotation.x
   particles.rotation.y = currentRotation.y
-
-  // 添加轻微的自动旋转
   particles.rotation.y += 0.001
 
   renderer.render(scene, camera)
@@ -179,10 +239,8 @@ const onResize = () => {
 onMounted(() => {
   if (!container.value || !canvas.value) return
 
-  // 创建场景
   scene = new THREE.Scene()
 
-  // 创建相机
   camera = new THREE.PerspectiveCamera(
     75,
     container.value.clientWidth / container.value.clientHeight,
@@ -191,7 +249,6 @@ onMounted(() => {
   )
   camera.position.z = 80
 
-  // 创建渲染器 - 启用GPU加速
   renderer = new THREE.WebGLRenderer({
     canvas: canvas.value,
     antialias: true,
@@ -208,72 +265,21 @@ onMounted(() => {
   renderer.toneMapping = THREE.ACESFilmicToneMapping
   renderer.toneMappingExposure = 1.0
 
-  // 创建粒子
   createParticles()
 
-  // 创建 Worker
-  try {
-    worker = new Worker(new URL('./worker.ts', import.meta.url), { type: 'module' })
-    startTime = Date.now()
-
-    // 监听 Worker 消息
-    worker.onmessage = (event: MessageEvent) => {
-      const { positions: newPositions, velocities: newVelocities } = event.data
-
-      // 更新粒子位置
-      const positionAttribute = particles.geometry.attributes.position
-      positionAttribute.set(newPositions)
-      positionAttribute.needsUpdate = true
-
-      // 更新速度
-      particleVelocities.set(newVelocities)
-    }
-
-    // 发送初始数据到 Worker
-    worker.postMessage({
-      positions: particlePositions,
-      velocities: particleVelocities,
-      time: 0
-    })
-
-    // 每帧向 Worker 发送数据
-    const updateWorker = () => {
-      if (worker && particlePositions) {
-        const currentTime = Date.now() - startTime
-        worker.postMessage({
-          positions: particlePositions,
-          velocities: particleVelocities,
-          time: currentTime
-        })
-      }
-      requestAnimationFrame(updateWorker)
-    }
-
-    // 开始 Worker 更新循环
-    updateWorker()
-
-  } catch (error) {
-    console.error('Failed to create worker:', error)
-  }
-
-  // 添加环境光
   const ambientLight = new THREE.AmbientLight(0xffffff, 0.5)
   scene.add(ambientLight)
 
-  // 添加点光源
   const pointLight = new THREE.PointLight(0xffffff, 1)
   pointLight.position.set(50, 50, 50)
   scene.add(pointLight)
 
-  // 事件监听
   window.addEventListener('resize', onResize)
   window.addEventListener('mousemove', onMouseMove)
   window.addEventListener('touchmove', onTouchMove, { passive: true })
 
-  // 设置手势
   setupHammer()
 
-  // 开始动画
   animate()
 })
 
@@ -284,10 +290,6 @@ onUnmounted(() => {
 
   if (hammer) {
     hammer.destroy()
-  }
-
-  if (worker) {
-    worker.terminate()
   }
 
   if (renderer) {
