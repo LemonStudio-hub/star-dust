@@ -224,6 +224,18 @@ export class NoiseTexture {
   }
 
   /**
+   * 获取预计算的噪声数据
+   * 
+   * 返回包含 Curl 旋度场的 Float32Array。
+   * 数据布局：[x0, y0, z0, x1, y1, z1, ..., xn, yn, zn]
+   * 
+   * @returns 噪声数据数组，如果已释放则返回 null
+   */
+  getData(): Float32Array | null {
+    return this.data
+  }
+
+  /**
    * 释放纹理数据内存
    * 
    * 当不再需要噪声纹理时调用此方法释放内存。

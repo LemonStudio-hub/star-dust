@@ -36,9 +36,9 @@ struct ConfigUniform {
 // 配置统一缓冲区（绑定点 2）
 @group(0) @binding(2) var<uniform> config: ConfigUniform;
 
-// 噪声纹理（绑定点 3）- 阶段 5 实现
-// @group(0) @binding(3) var noiseTexture: texture_3d<f32>;
-// @group(0) @binding(4) var noiseSampler: sampler;
+// 噪声纹理（绑定点 3）
+@group(0) @binding(3) var noiseTexture: texture_3d<f32>;
+@group(0) @binding(4) var noiseSampler: sampler;
 
 // 简单的哈希函数，用于生成随机数
 fn hash(index: u32) -> u32 {
@@ -54,13 +54,22 @@ fn hashToFloat(index: u32) -> f32 {
   return f32(hash(index)) / 4294967296.0;
 }
 
-// 简单的伪随机噪声函数（替代噪声纹理）
-fn pseudoNoise(position: vec3<f32>, time: f32) -> vec3<f32> {
-  let scale = 0.01;
-  let x = sin(position.x * scale + time * 0.0001);
-  let y = cos(position.y * scale + time * 0.0002);
-  let z = sin(position.z * scale + time * 0.0003);
-  return vec3<f32>(x, y, z);
+// 从噪声纹理采样
+fn sampleNoiseTexture(position: vec3<f32>, time: f32) -> vec3<f32> {
+  let texSize = vec3<f32>(64.0, 64.0, 64.0);
+  let scale = 0.008;
+  let timeScale = 0.0001;
+  
+  // 归一化到 [0, 1]
+  let nx = ((position.x * scale) % 1.0 + 1.0) % 1.0;
+  let ny = ((position.y * scale) % 1.0 + 1.0) % 1.0;
+  let nz = ((position.z * scale + time * timeScale) % 1.0 + 1.0) % 1.0;
+  
+  // 采样纹理
+  let coord = vec3<f32>(nx, ny, nz);
+  let noise = textureSample(noiseTexture, noiseSampler, coord);
+  
+  return noise * 2.0 - 1.0; // 归一化到 [-1, 1]
 }
 
 // 重置粒子到中心
@@ -125,9 +134,8 @@ fn updateParticles(@builtin(global_invocation_id) globalId: vec3<u32>) {
   // 读取输入粒子
   var particle = particlesIn[index];
 
-  // 采样噪声场（使用伪随机噪声，后续替换为纹理采样）
-  // let curl = sampleNoiseTexture(particle.position, config.time);
-  let curl = pseudoNoise(particle.position, config.time) * 2.0;
+  // 采样噪声纹理
+  let curl = sampleNoiseTexture(particle.position, config.time);
 
   // 更新速度
   particle.velocity += curl * config.velocityScale * config.deltaTime;

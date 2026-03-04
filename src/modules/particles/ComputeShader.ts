@@ -24,6 +24,11 @@ export interface ComputeShaderConfig {
   boundsRadius: number
   /** 帧间隔时间（秒） */
   deltaTime: number
+  /** 噪声纹理（可选） */
+  noiseTexture?: {
+    textureView: GPUTextureView
+    sampler: GPUSampler
+  }
 }
 
 /**
@@ -102,34 +107,56 @@ export class ComputeShader {
       code: shaderCode
     })
 
-    // 创建绑定组布局
-    this.bindGroupLayout = this.device.createBindGroupLayout({
-      entries: [
-        // 输入粒子缓冲区
-        {
-          binding: 0,
-          visibility: GPUShaderStage.COMPUTE,
-          buffer: {
-            type: 'read-only-storage'
-          }
-        },
-        // 输出粒子缓冲区
-        {
-          binding: 1,
-          visibility: GPUShaderStage.COMPUTE,
-          buffer: {
-            type: 'storage'
-          }
-        },
-        // 配置统一缓冲区
-        {
-          binding: 2,
-          visibility: GPUShaderStage.COMPUTE,
-          buffer: {
-            type: 'uniform'
-          }
+    // 创建绑定组布局条目
+    const entries: GPUBindGroupLayoutEntry[] = [
+      // 输入粒子缓冲区
+      {
+        binding: 0,
+        visibility: GPUShaderStage.COMPUTE,
+        buffer: {
+          type: 'read-only-storage'
         }
-      ]
+      },
+      // 输出粒子缓冲区
+      {
+        binding: 1,
+        visibility: GPUShaderStage.COMPUTE,
+        buffer: {
+          type: 'storage'
+        }
+      },
+      // 配置统一缓冲区
+      {
+        binding: 2,
+        visibility: GPUShaderStage.COMPUTE,
+        buffer: {
+          type: 'uniform'
+        }
+      }
+    ]
+
+    // 添加噪声纹理绑定（如果可用）
+    if (this.config.noiseTexture) {
+      entries.push(
+        {
+          binding: 3,
+          visibility: GPUShaderStage.COMPUTE,
+          texture: {
+            sampleType: 'float',
+            viewDimension: '3d',
+            multisampled: false
+          }
+        },
+        {
+          binding: 4,
+          visibility: GPUShaderStage.COMPUTE,
+          sampler: {}
+        }
+      )
+    }
+
+    this.bindGroupLayout = this.device.createBindGroupLayout({
+      entries
     })
 
     // 创建计算管线
@@ -179,28 +206,44 @@ export class ComputeShader {
    * @private
    */
   private createBindGroup(): void {
+    const entries: GPUBindGroupEntry[] = [
+      {
+        binding: 0,
+        resource: {
+          buffer: this.particleBuffer.getInputBuffer()
+        }
+      },
+      {
+        binding: 1,
+        resource: {
+          buffer: this.particleBuffer.getOutputBuffer()
+        }
+      },
+      {
+        binding: 2,
+        resource: {
+          buffer: this.uniformBuffer
+        }
+      }
+    ]
+
+    // 添加噪声纹理绑定（如果可用）
+    if (this.config.noiseTexture) {
+      entries.push(
+        {
+          binding: 3,
+          resource: this.config.noiseTexture.textureView
+        },
+        {
+          binding: 4,
+          resource: this.config.noiseTexture.sampler
+        }
+      )
+    }
+
     this.bindGroup = this.device.createBindGroup({
       layout: this.bindGroupLayout,
-      entries: [
-        {
-          binding: 0,
-          resource: {
-            buffer: this.particleBuffer.getInputBuffer()
-          }
-        },
-        {
-          binding: 1,
-          resource: {
-            buffer: this.particleBuffer.getOutputBuffer()
-          }
-        },
-        {
-          binding: 2,
-          resource: {
-            buffer: this.uniformBuffer
-          }
-        }
-      ]
+      entries
     })
 
     console.log('✓ 绑定组已创建')
@@ -303,6 +346,8 @@ struct ConfigUniform {
 @group(0) @binding(0) var<storage, read> particlesIn: array<Particle>;
 @group(0) @binding(1) var<storage, read_write> particlesOut: array<Particle>;
 @group(0) @binding(2) var<uniform> config: ConfigUniform;
+@group(0) @binding(3) var noiseTexture: texture_3d<f32>;
+@group(0) @binding(4) var noiseSampler: sampler;
 
 fn hash(index: u32) -> u32 {
   var state = index;
@@ -314,6 +359,21 @@ fn hash(index: u32) -> u32 {
 
 fn hashToFloat(index: u32) -> f32 {
   return f32(hash(index)) / 4294967296.0;
+}
+
+fn sampleNoiseTexture(position: vec3<f32>, time: f32) -> vec3<f32> {
+  let texSize = vec3<f32>(64.0, 64.0, 64.0);
+  let scale = 0.008;
+  let timeScale = 0.0001;
+  
+  let nx = ((position.x * scale) % 1.0 + 1.0) % 1.0;
+  let ny = ((position.y * scale) % 1.0 + 1.0) % 1.0;
+  let nz = ((position.z * scale + time * timeScale) % 1.0 + 1.0) % 1.0;
+  
+  let coord = vec3<f32>(nx, ny, nz);
+  let noise = textureSample(noiseTexture, noiseSampler, coord);
+  
+  return noise * 2.0 - 1.0;
 }
 
 fn pseudoNoise(position: vec3<f32>, time: f32) -> vec3<f32> {
@@ -378,7 +438,7 @@ fn updateParticles(@builtin(global_invocation_id) globalId: vec3<u32>) {
 
   var particle = particlesIn[index];
 
-  let curl = pseudoNoise(particle.position, config.time) * 2.0;
+  let curl = sampleNoiseTexture(particle.position, config.time);
 
   particle.velocity += curl * config.velocityScale * config.deltaTime;
 
