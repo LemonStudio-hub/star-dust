@@ -267,4 +267,61 @@ export class ParticleSystem {
       console.error('释放粒子系统资源失败:', error)
     }
   }
+
+  /**
+   * 获取当前配置
+   * 
+   * @returns 当前粒子系统配置
+   */
+  getConfig(): ParticleConfig {
+    return { ...this.config }
+  }
+
+  /**
+   * 更新粒子系统配置
+   * 
+   * 动态更新粒子系统的参数，无需重建整个系统。
+   * 
+   * @param config - 新的配置参数（部分更新）
+   * 
+   * @example
+   * ```typescript
+   * particleSystem.updateConfig({
+   *   size: 2.0,
+   *   velocityScale: 0.1
+   * });
+   * ```
+   */
+  updateConfig(config: Partial<ParticleConfig>): void {
+    if (this.disposed) {
+      return
+    }
+
+    try {
+      // 更新粒子大小
+      if (config.size !== undefined) {
+        this.config.size = config.size
+        if (this.points.material instanceof THREE.PointsMaterial) {
+          this.points.material.size = config.size
+        }
+      }
+
+      // 更新边界半径
+      if (config.boundsRadius !== undefined) {
+        this.config.boundsRadius = config.boundsRadius
+      }
+
+      // 更新速度缩放因子
+      if (config.velocityScale !== undefined) {
+        this.config.velocityScale = config.velocityScale
+      }
+
+      // 更新最大速度
+      if (config.maxSpeed !== undefined) {
+        this.config.maxSpeed = config.maxSpeed
+      }
+    } catch (error) {
+      console.error('更新粒子系统配置时发生错误:', error)
+    }
+  }
 }

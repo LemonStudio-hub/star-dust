@@ -284,4 +284,52 @@ export class AppManager {
       console.error('释放应用资源时发生错误:', error)
     }
   }
+
+  /**
+   * 更新粒子系统配置
+   * 
+   * 动态更新粒子系统的参数，实现实时调整。
+   * 
+   * @param config - 新的配置参数
+   * 
+   * @example
+   * ```typescript
+   * appManager.updateConfig({
+   *   particleCount: 50000,
+   *   particleSize: 2.0,
+   *   boundsRadius: 80,
+   *   velocityScale: 0.1,
+   *   maxSpeed: 0.2
+   * });
+   * ```
+   */
+  updateConfig(config: AppConfig): void {
+    try {
+      // 更新粒子数量 - 需要重建粒子系统
+      if (config.particleCount !== undefined && config.particleCount !== this.particleSystem.getConfig().count) {
+        console.log('更新粒子数量:', config.particleCount)
+        // 清理旧的粒子系统
+        this.particleSystem.dispose(this.renderer.scene)
+        // 创建新的粒子系统
+        const particleConfig: ParticleConfig = {
+          count: config.particleCount,
+          size: config.particleSize,
+          boundsRadius: config.boundsRadius,
+          velocityScale: config.velocityScale,
+          maxSpeed: config.maxSpeed
+        }
+        this.particleSystem = new ParticleSystem(this.renderer.scene, particleConfig, this.noiseTexture)
+      } else {
+        // 更新其他参数 - 无需重建
+        this.particleSystem.updateConfig({
+          size: config.particleSize,
+          boundsRadius: config.boundsRadius,
+          velocityScale: config.velocityScale,
+          maxSpeed: config.maxSpeed
+        })
+      }
+    } catch (error) {
+      console.error('更新配置时发生错误:', error)
+    }
+  }
 }
