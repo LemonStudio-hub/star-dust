@@ -92,13 +92,18 @@ export class AppManager {
    * ```
    */
   constructor(container: HTMLElement, canvas: HTMLCanvasElement, config: AppConfig) {
-    this.container = container
-    this.canvas = canvas
-    this.targetRotation = new THREE.Vector2()
-    this.currentRotation = new THREE.Vector2()
-    this.time = 0
+    try {
+      this.container = container
+      this.canvas = canvas
+      this.targetRotation = new THREE.Vector2()
+      this.currentRotation = new THREE.Vector2()
+      this.time = 0
 
-    this.initialize(config)
+      this.initialize(config)
+    } catch (error) {
+      console.error('应用初始化失败:', error)
+      throw new Error(`应用初始化失败: ${error instanceof Error ? error.message : String(error)}`)
+    }
   }
 
   /**
@@ -115,36 +120,47 @@ export class AppManager {
    * @private
    */
   private initialize(config: AppConfig): void {
-    // 步骤 1：初始化渲染器
-    const rendererConfig: RendererConfig = {
-      canvas: this.canvas,
-      width: this.container.clientWidth,
-      height: this.container.clientHeight
+    try {
+      // 步骤 1：初始化渲染器
+      const rendererConfig: RendererConfig = {
+        canvas: this.canvas,
+        width: this.container.clientWidth,
+        height: this.container.clientHeight
+      }
+      this.renderer = new Renderer(rendererConfig)
+
+      // 步骤 2：预计算噪声纹理
+      console.log('初始化噪声纹理...')
+      this.noiseTexture = new NoiseTexture()
+
+      // 步骤 3：创建粒子系统
+      console.log('创建粒子系统...')
+      const particleConfig: ParticleConfig = {
+        count: config.particleCount,
+        size: config.particleSize,
+        boundsRadius: config.boundsRadius,
+        velocityScale: config.velocityScale,
+        maxSpeed: config.maxSpeed
+      }
+      this.particleSystem = new ParticleSystem(this.renderer.scene, particleConfig, this.noiseTexture)
+
+      // 步骤 4：初始化交互系统
+      console.log('初始化交互系统...')
+      this.initializeInteractions()
+
+      // 步骤 5：启动主循环
+      console.log('启动应用...')
+      this.animate()
+    } catch (error) {
+      console.error('应用初始化过程中发生错误:', error)
+      // 尝试清理已初始化的资源
+      try {
+        this.dispose()
+      } catch (cleanupError) {
+        console.error('清理资源时发生错误:', cleanupError)
+      }
+      throw error
     }
-    this.renderer = new Renderer(rendererConfig)
-
-    // 步骤 2：预计算噪声纹理
-    console.log('初始化噪声纹理...')
-    this.noiseTexture = new NoiseTexture()
-
-    // 步骤 3：创建粒子系统
-    console.log('创建粒子系统...')
-    const particleConfig: ParticleConfig = {
-      count: config.particleCount,
-      size: config.particleSize,
-      boundsRadius: config.boundsRadius,
-      velocityScale: config.velocityScale,
-      maxSpeed: config.maxSpeed
-    }
-    this.particleSystem = new ParticleSystem(this.renderer.scene, particleConfig, this.noiseTexture)
-
-    // 步骤 4：初始化交互系统
-    console.log('初始化交互系统...')
-    this.initializeInteractions()
-
-    // 步骤 5：启动主循环
-    console.log('启动应用...')
-    this.animate()
   }
 
   /**
@@ -208,23 +224,29 @@ export class AppManager {
   private animate = (): void => {
     this.animationFrameId = requestAnimationFrame(this.animate)
 
-    // 更新时间
-    this.time += 16
+    try {
+      // 更新时间
+      this.time += 16
 
-    // 更新粒子系统
-    this.particleSystem.update(this.time)
+      // 更新粒子系统
+      this.particleSystem.update(this.time)
 
-    // 平滑插值更新旋转角度
-    this.currentRotation.x += (this.targetRotation.x - this.currentRotation.x) * 0.05
-    this.currentRotation.y += (this.targetRotation.y - this.currentRotation.y) * 0.05
+      // 平滑插值更新旋转角度
+      this.currentRotation.x += (this.targetRotation.x - this.currentRotation.x) * 0.05
+      this.currentRotation.y += (this.targetRotation.y - this.currentRotation.y) * 0.05
 
-    // 应用旋转
-    this.particleSystem.points.rotation.x = this.currentRotation.x
-    this.particleSystem.points.rotation.y = this.currentRotation.y
-    this.particleSystem.points.rotation.y += 0.001  // 自动旋转
+      // 应用旋转
+      this.particleSystem.points.rotation.x = this.currentRotation.x
+      this.particleSystem.points.rotation.y = this.currentRotation.y
+      this.particleSystem.points.rotation.y += 0.001  // 自动旋转
 
-    // 渲染场景
-    this.renderer.render()
+      // 渲染场景
+      this.renderer.render()
+    } catch (error) {
+      console.error('渲染循环中发生错误:', error)
+      // 停止动画循环以防止错误持续发生
+      cancelAnimationFrame(this.animationFrameId)
+    }
   }
 
   /**
@@ -238,24 +260,28 @@ export class AppManager {
    * ```
    */
   dispose(): void {
-    // 停止动画循环
-    cancelAnimationFrame(this.animationFrameId)
+    try {
+      // 停止动画循环
+      cancelAnimationFrame(this.animationFrameId)
 
-    // 移除事件监听器
-    window.removeEventListener('resize', this.handleResize)
+      // 移除事件监听器
+      window.removeEventListener('resize', this.handleResize)
 
-    // 清理交互系统
-    this.mouseInteraction.dispose()
-    this.touchInteraction.dispose()
-    this.gestureHandler.dispose()
+      // 清理交互系统
+      this.mouseInteraction.dispose()
+      this.touchInteraction.dispose()
+      this.gestureHandler.dispose()
 
-    // 清理粒子系统
-    this.particleSystem.dispose(this.renderer.scene)
+      // 清理粒子系统
+      this.particleSystem.dispose(this.renderer.scene)
 
-    // 清理噪声纹理
-    this.noiseTexture.dispose()
+      // 清理噪声纹理
+      this.noiseTexture.dispose()
 
-    // 清理渲染器
-    this.renderer.dispose()
+      // 清理渲染器
+      this.renderer.dispose()
+    } catch (error) {
+      console.error('释放应用资源时发生错误:', error)
+    }
   }
 }

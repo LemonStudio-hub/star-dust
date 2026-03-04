@@ -47,13 +47,15 @@ export class ParticleSystem {
   /** Three.js 点云对象 */
   public points: THREE.Points
   /** 粒子位置数组 */
-  private positions: Float32Array
+  private positions: Float32Array | null = null
   /** 粒子速度数组 */
-  private velocities: Float32Array
+  private velocities: Float32Array | null = null
   /** 粒子系统配置 */
   private config: ParticleConfig
   /** 噪声纹理引用 */
   private noiseTexture: NoiseTexture
+  /** 标记是否已释放资源 */
+  private disposed: boolean = false
 
   /**
    * 构造函数，初始化粒子系统
@@ -177,60 +179,69 @@ export class ParticleSystem {
    * ```
    */
   update(time: number): void {
-    const positions = this.points.geometry.attributes.position.array as Float32Array
-    const len = positions.length
+    if (this.disposed || !this.positions || !this.velocities) {
+      return
+    }
 
-    // 更新每个粒子
-    for (let i = 0; i < len; i += 3) {
-      const x = positions[i]
-      const y = positions[i + 1]
-      const z = positions[i + 2]
+    try {
+      const positions = this.points.geometry.attributes.position.array as Float32Array
+      const len = positions.length
 
-      // 从噪声纹理采样速度向量
-      const curl = this.noiseTexture.sample(x, y, z, time)
+      // 更新每个粒子
+      for (let i = 0; i < len; i += 3) {
+        const x = positions[i]
+        const y = positions[i + 1]
+        const z = positions[i + 2]
 
-      // 根据噪声向量更新速度
-      this.velocities[i] += curl.x * this.config.velocityScale
-      this.velocities[i + 1] += curl.y * this.config.velocityScale
-      this.velocities[i + 2] += curl.z * this.config.velocityScale
+        // 从噪声纹理采样速度向量
+        const curl = this.noiseTexture.sample(x, y, z, time)
 
-      // 计算当前速度
-      const speed = Math.sqrt(
-        this.velocities[i] * this.velocities[i] +
-        this.velocities[i + 1] * this.velocities[i + 1] +
-        this.velocities[i + 2] * this.velocities[i + 2]
-      )
+        // 根据噪声向量更新速度
+        this.velocities[i] += curl.x * this.config.velocityScale
+        this.velocities[i + 1] += curl.y * this.config.velocityScale
+        this.velocities[i + 2] += curl.z * this.config.velocityScale
 
-      // 限制最大速度
-      if (speed > this.config.maxSpeed) {
-        const factor = this.config.maxSpeed / speed
-        this.velocities[i] *= factor
-        this.velocities[i + 1] *= factor
-        this.velocities[i + 2] *= factor
-      }
+        // 计算当前速度
+        const speed = Math.sqrt(
+          this.velocities[i] * this.velocities[i] +
+          this.velocities[i + 1] * this.velocities[i + 1] +
+          this.velocities[i + 2] * this.velocities[i + 2]
+        )
 
-      // 更新位置
-      positions[i] += this.velocities[i]
-      positions[i + 1] += this.velocities[i + 1]
-      positions[i + 2] += this.velocities[i + 2]
+        // 限制最大速度
+        if (speed > this.config.maxSpeed) {
+          const factor = this.config.maxSpeed / speed
+          this.velocities[i] *= factor
+          this.velocities[i + 1] *= factor
+          this.velocities[i + 2] *= factor
+        }
 
-      // 检查边界条件
-      const distSq = x * x + y * y + z * z
-      if (distSq > 3600) {  // 距离 > 60
-        // 重置到中心附近
-        positions[i] *= 0.1
-        positions[i + 1] *= 0.1
-        positions[i + 2] *= 0.1
+        // 更新位置
+        positions[i] += this.velocities[i]
+        positions[i + 1] += this.velocities[i + 1]
+        positions[i + 2] += this.velocities[i + 2]
 
-        // 重置速度
-        this.velocities[i] = (Math.random() - 0.5) * 0.05
-        this.velocities[i + 1] = (Math.random() - 0.5) * 0.05
-        this.velocities[i + 2] = (Math.random() - 0.5) * 0.05
+        // 检查边界条件
+        const distSq = x * x + y * y + z * z
+        const boundsRadiusSq = this.config.boundsRadius * this.config.boundsRadius
+        if (distSq > boundsRadiusSq) {
+          // 重置到中心附近
+          positions[i] *= 0.1
+          positions[i + 1] *= 0.1
+          positions[i + 2] *= 0.1
+
+          // 重置速度
+          this.velocities[i] = (Math.random() - 0.5) * 0.05
+          this.velocities[i + 1] = (Math.random() - 0.5) * 0.05
+          this.velocities[i + 2] = (Math.random() - 0.5) * 0.05
       }
     }
 
     // 标记位置属性需要更新
     this.points.geometry.attributes.position.needsUpdate = true
+    } catch (error) {
+      console.error('更新粒子系统时发生错误:', error)
+    }
   }
 
   /**
@@ -241,10 +252,19 @@ export class ParticleSystem {
    * @param scene - Three.js 场景对象
    */
   dispose(scene: THREE.Scene): void {
-    scene.remove(this.points)
-    this.points.geometry.dispose()
-    this.points.material.dispose()
-    this.positions = null as any
-    this.velocities = null as any
+    if (this.disposed) {
+      return
+    }
+    
+    try {
+      scene.remove(this.points)
+      this.points.geometry.dispose()
+      this.points.material.dispose()
+      this.positions = null
+      this.velocities = null
+      this.disposed = true
+    } catch (error) {
+      console.error('释放粒子系统资源失败:', error)
+    }
   }
 }

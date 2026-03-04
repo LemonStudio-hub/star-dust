@@ -38,11 +38,13 @@ export interface NoiseVector {
  */
 export class NoiseTexture {
   /** 存储预计算的噪声数据（XYZ 三个分量） */
-  private data: Float32Array
+  private data: Float32Array | null = null
   /** 纹理尺寸（立方体边长） */
   public readonly size: number
   /** 纹理体积（总像素数） */
   public readonly volume: number
+  /** 标记是否已释放资源 */
+  private disposed: boolean = false
 
   /**
    * 构造函数，初始化并预计算噪声纹理
@@ -75,11 +77,12 @@ export class NoiseTexture {
    * @private
    */
   private precompute(): Float32Array {
-    console.log('开始预计算3D噪声纹理...')
-    const startTime = performance.now()
-    
-    // 创建 FBM 噪声生成器
-    const fbm = new FBMNoise(6, 0.65, 2.5)
+    try {
+      console.log('开始预计算3D噪声纹理...')
+      const startTime = performance.now()
+      
+      // 创建 FBM 噪声生成器
+      const fbm = new FBMNoise(6, 0.65, 2.5)
     
     // 存储三个标量噪声场
     const data1 = new Float32Array(this.volume)
@@ -152,9 +155,13 @@ export class NoiseTexture {
     }
     
     const elapsed = performance.now() - startTime
-    console.log(`3D噪声纹理预计算完成，耗时: ${elapsed.toFixed(2)}ms`)
-    
-    return curlData
+      console.log(`3D噪声纹理预计算完成，耗时: ${elapsed.toFixed(2)}ms`)
+      
+      return curlData
+    } catch (error) {
+      console.error('预计算3D噪声纹理失败:', error)
+      throw new Error(`噪声纹理预计算失败: ${error instanceof Error ? error.message : String(error)}`)
+    }
   }
 
   /**
@@ -187,6 +194,11 @@ export class NoiseTexture {
    * ```
    */
   sample(x: number, y: number, z: number, time: number, scale: number = 0.008, timeScale: number = 0.0001): NoiseVector {
+    if (this.disposed || !this.data) {
+      console.warn('尝试采样已释放的噪声纹理')
+      return { x: 0, y: 0, z: 0 }
+    }
+    
     // 将世界坐标归一化到 [0, 1] 范围
     const nx = ((x * scale) % 1 + 1) % 1
     const ny = ((y * scale) % 1 + 1) % 1
@@ -212,8 +224,14 @@ export class NoiseTexture {
    * 释放纹理数据内存
    * 
    * 当不再需要噪声纹理时调用此方法释放内存。
+   * 重复调用此方法是安全的。
    */
   dispose(): void {
-    this.data = null as any
+    if (this.disposed) {
+      return
+    }
+    
+    this.data = null
+    this.disposed = true
   }
 }
