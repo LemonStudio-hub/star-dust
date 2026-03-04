@@ -170,11 +170,13 @@ export class RenderPipeline {
   private getVertexShaderCode(): string {
     return `
 struct Particle {
-  position: vec3<f32>,
-  velocity: vec3<f32>,
-  color: vec3<f32>,
-  _padding: f32,
-}
+  position: vec3<f32>,   // offset 0,  12 bytes
+  _p0: f32,              // offset 12, 4 bytes padding
+  velocity: vec3<f32>,   // offset 16, 12 bytes
+  _p1: f32,              // offset 28, 4 bytes padding
+  color: vec3<f32>,      // offset 32, 12 bytes
+  _p2: f32               // offset 44, 4 bytes padding
+}  // 总计: 48 bytes
 
 struct VertexOutput {
   @builtin(position) position: vec4<f32>,
@@ -415,11 +417,12 @@ fn main(input: FragmentInput) -> @location(0) vec4<f32> {
       this.cameraUniform.cameraPosition.set(cameraPosition)
     }
 
-    // 上传到 GPU
+// 上传到 GPU
     const data = new Float32Array(36)
-    data.set(this.cameraUniform.viewMatrix, 0)
-    data.set(this.cameraUniform.projectionMatrix, 16)
-    data.set(this.cameraUniform.cameraPosition, 32)
+    data.set(this.cameraUniform.viewMatrix, 0)      // 16 floats
+    data.set(this.cameraUniform.projectionMatrix, 16) // 16 floats
+    data.set(this.cameraUniform.cameraPosition, 32)   // 3 floats
+    data[35] = 0  // padding，总共 36 floats = 144 bytes
 
     this.device.queue.writeBuffer(this.cameraUniformBuffer, 0, data)
   }
@@ -468,6 +471,14 @@ fn main(input: FragmentInput) -> @location(0) vec4<f32> {
     try {
       this.cameraUniformBuffer.destroy()
       this.renderUniformBuffer.destroy()
+      
+      // 注意：pipeline 和 bindGroupLayout 不需要显式销毁
+      // 它们会在 device 销毁时自动清理
+      // 但我们可以设置为 null 以便垃圾回收
+      this.pipeline = null as any
+      this.bindGroupLayout = null
+      this.bindGroup = null
+      
       this.disposed = true
       console.log('✓ 渲染管线资源已释放')
     } catch (error) {

@@ -10,7 +10,7 @@
 
 struct FragmentInput {
   @location(0) color: vec3<f32>,
-  @location(1) pointSize: f32>,
+  @location(1) pointSize: f32,
 }
 
 /**

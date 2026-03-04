@@ -234,11 +234,11 @@ export class ParticleSystem {
           this.velocities[i] = (Math.random() - 0.5) * 0.05
           this.velocities[i + 1] = (Math.random() - 0.5) * 0.05
           this.velocities[i + 2] = (Math.random() - 0.5) * 0.05
+        }
       }
-    }
 
-    // 标记位置属性需要更新
-    this.points.geometry.attributes.position.needsUpdate = true
+      // 标记位置属性需要更新
+      this.points.geometry.attributes.position.needsUpdate = true
     } catch (error) {
       console.error('更新粒子系统时发生错误:', error)
     }

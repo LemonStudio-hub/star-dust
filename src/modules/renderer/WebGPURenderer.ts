@@ -39,6 +39,8 @@ export class WebGPURenderer implements IRenderer {
   private initialized = false
   /** 适配器 */
   private adapter: GPUAdapter | null = null
+  /** 深度纹理 */
+  private depthTexture: GPUTexture | null = null
 
   /**
    * 构造函数，初始化 WebGPU 渲染器
@@ -231,17 +233,33 @@ export class WebGPURenderer implements IRenderer {
     this.device.queue.submit([commandEncoder.finish()])
   }
 
-  /**
-   * 创建深度附件
+/**
+   * 创建深度模板附件
    * 
    * @returns 深度模板附件描述符
    * @private
    */
   private createDepthAttachment(): GPURenderPassDepthStencilAttachment {
-    // 注意：需要创建深度纹理
-    // 这里简化处理，实际实现需要创建和管理深度纹理
+    if (!this.device || !this.canvas) {
+      return {
+        view: null as any,
+        depthClearValue: 1.0,
+        depthLoadOp: 'clear',
+        depthStoreOp: 'store'
+      }
+    }
+
+    // 如果深度纹理不存在或尺寸不匹配，则创建新的深度纹理
+    if (!this.depthTexture) {
+      this.depthTexture = this.device.createTexture({
+        size: [this.canvas.width, this.canvas.height],
+        format: 'depth24plus',
+        usage: GPUTextureUsage.RENDER_ATTACHMENT
+      })
+    }
+
     return {
-      view: null as any, // 需要实际的深度纹理视图
+      view: this.depthTexture.createView(),
       depthClearValue: 1.0,
       depthLoadOp: 'clear',
       depthStoreOp: 'store'
@@ -259,8 +277,11 @@ export class WebGPURenderer implements IRenderer {
     this.camera.aspect = width / height
     this.camera.updateProjectionMatrix()
 
-    // 注意：WebGPU 的 Canvas 大小会自动调整
-    // 不需要像 WebGL 那样手动调用 renderer.setSize()
+    // 销毁旧的深度纹理
+    if (this.depthTexture) {
+      this.depthTexture.destroy()
+      this.depthTexture = null
+    }
   }
 
   /**
@@ -272,6 +293,12 @@ export class WebGPURenderer implements IRenderer {
     }
 
     console.log('正在释放 WebGPU 渲染器资源...')
+
+    // 清理深度纹理
+    if (this.depthTexture) {
+      this.depthTexture.destroy()
+      this.depthTexture = null
+    }
 
     // 注意：WebGPU 资源会在设备销毁时自动释放
     // 但我们应该手动清理所有创建的缓冲区、纹理等

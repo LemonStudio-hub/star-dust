@@ -9,16 +9,18 @@
  */
 
 struct Particle {
-  position: vec3<f32>,
-  velocity: vec3<f32>,
-  color: vec3<f32>,
-  _padding: f32,
-}
+  position: vec3<f32>,   // offset 0,  12 bytes
+  _p0: f32,              // offset 12, 4 bytes padding
+  velocity: vec3<f32>,   // offset 16, 12 bytes
+  _p1: f32,              // offset 28, 4 bytes padding
+  color: vec3<f32>,      // offset 32, 12 bytes
+  _p2: f32               // offset 44, 4 bytes padding
+}  // 总计: 48 bytes
 
 struct VertexOutput {
   @builtin(position) position: vec4<f32>,
   @location(0) color: vec3<f32>,
-  @location(1) pointSize: f32>,
+  @location(1) pointSize: f32,
 }
 
 struct CameraUniform {

@@ -326,11 +326,13 @@ export class ComputeShader {
     // 在实际项目中，可以通过 import 或 fetch 加载
     return `
 struct Particle {
-  position: vec3<f32>,
-  velocity: vec3<f32>,
-  color: vec3<f32>,
-  _padding: f32>,
-}
+  position: vec3<f32>,   // offset 0,  12 bytes
+  _p0: f32,              // offset 12, 4 bytes padding
+  velocity: vec3<f32>,   // offset 16, 12 bytes
+  _p1: f32,              // offset 28, 4 bytes padding
+  color: vec3<f32>,      // offset 32, 12 bytes
+  _p2: f32               // offset 44, 4 bytes padding
+}  // 总计: 48 bytes
 
 struct ConfigUniform {
   velocityScale: f32,
@@ -472,6 +474,13 @@ fn updateParticles(@builtin(global_invocation_id) globalId: vec3<u32>) {
     console.log('正在释放计算着色器资源...')
 
     this.uniformBuffer.destroy()
+    
+    // 注意：pipeline 和 bindGroupLayout 不需要显式销毁
+    // 它们会在 device 销毁时自动清理
+    this.pipeline = null as any
+    this.bindGroupLayout = null
+    this.bindGroup = null
+    
     this.disposed = true
 
     console.log('✓ 计算着色器资源已释放')

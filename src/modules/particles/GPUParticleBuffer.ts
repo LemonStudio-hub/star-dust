@@ -10,12 +10,11 @@
 /**
  * 粒子数据结构（GPU 端）
  * 
- * 在 GPU 中，粒子数据使用 16 字节对齐的结构：
- * - position: vec3<f32> (12 bytes)
- * - velocity: vec3<f32> (12 bytes)
- * - color: vec3<f32> (12 bytes)
- * - _padding: f32 (4 bytes)
- * 总计: 40 bytes（为了对齐，实际使用 48 bytes）
+ * 在 GPU 中，粒子数据使用 16 字节对齐的结构（std140 布局）：
+ * - position: vec3<f32> (12 bytes) + 4 bytes padding = 16 bytes (offset 0)
+ * - velocity: vec3<f32> (12 bytes) + 4 bytes padding = 16 bytes (offset 16)
+ * - color: vec3<f32> (12 bytes) + 4 bytes padding = 16 bytes (offset 32)
+ * 总计: 48 bytes
  * 
  * @interface GPUParticle
  */

@@ -25,10 +25,6 @@ export class DoubleBufferManager {
   private computeShader: ComputeShader
   /** 当前缓冲区索引 */
   private currentBufferIndex = 0
-  /** Fence 用于同步 */
-  private fence: GPUFence | null = null
-  /** Fence 值 */
-  private signaledValue = 0u
   /** 是否已释放 */
   private disposed = false
 
@@ -64,9 +60,6 @@ export class DoubleBufferManager {
       console.warn('粒子缓冲区未启用双缓冲，将使用单缓冲模式')
     }
 
-    // 创建 fence 用于同步
-    this.fence = this.device.createFence()
-
     console.log('✓ 双缓冲管理器已创建')
   }
 
@@ -82,9 +75,6 @@ export class DoubleBufferManager {
       throw new Error('双缓冲管理器已释放')
     }
 
-    // 等待上一帧完成
-    await this.waitForFrame()
-
     // 创建命令编码器
     const encoder = this.device.createCommandEncoder()
 
@@ -98,35 +88,15 @@ export class DoubleBufferManager {
     const commandBuffer = encoder.finish()
     this.device.queue.submit([commandBuffer])
 
-    // 设置 fence
-    this.device.queue.signal(this.fence!, ++this.signaledValue)
+    // 等待 GPU 完成当前帧
+    try {
+      await this.device.queue.onSubmittedWorkDone()
+    } catch (error) {
+      console.warn('等待 GPU 完成失败:', error)
+    }
 
     // 交换缓冲区
     this.swapBuffers()
-  }
-
-  /**
-   * 等待当前帧完成
-   * 
-   * @returns Promise，在帧完成后解析
-   * @private
-   */
-  private async waitForFrame(): Promise<void> {
-    if (this.signaledValue === 0) {
-      return // 第一帧不需要等待
-    }
-
-    // 等待 GPU 完成
-    this.device.poll()
-    
-    // 如果 fence 未就绪，等待
-    if (this.fence!.getCompletedValue() < this.signaledValue) {
-      try {
-        await this.fence!.onCompletion(this.signaledValue)
-      } catch (error) {
-        console.warn('Fence 等待失败:', error)
-      }
-    }
   }
 
   /**

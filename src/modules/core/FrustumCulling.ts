@@ -137,13 +137,13 @@ export class FrustumCulling {
     this.planes[1].normal.set(m[3] - m[0], m[7] - m[4], m[11] - m[8])
     this.planes[1].constant = -(m[15] - m[12])
 
-    // 下平面: m[3] + m[1]
-    this.planes[2].normal.set(m[3] + m[1], m[7] + m[5], m[11] + m[9])
-    this.planes[2].constant = -(m[15] + m[13])
+    // 下平面: m[3] - m[1]
+    this.planes[2].normal.set(m[3] - m[1], m[7] - m[5], m[11] - m[9])
+    this.planes[2].constant = -(m[15] - m[13])
 
-    // 上平面: m[3] - m[1]
-    this.planes[3].normal.set(m[3] - m[1], m[7] - m[5], m[11] - m[9])
-    this.planes[3].constant = -(m[15] - m[13])
+    // 上平面: m[3] + m[1]
+    this.planes[3].normal.set(m[3] + m[1], m[7] + m[5], m[11] + m[9])
+    this.planes[3].constant = -(m[15] + m[13])
 
     // 近平面: m[3] + m[2]
     this.planes[4].normal.set(m[3] + m[2], m[7] + m[6], m[11] + m[10])
