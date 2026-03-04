@@ -24,7 +24,7 @@ export interface RendererConfig {
 }
 
 /**
- * 渲染器类
+   * 渲染器类
  * 
  * 管理 WebGL 渲染器、场景和相机的创建与配置。
  * 提供高性能的 3D 渲染环境，支持各种渲染优化。
@@ -35,6 +35,7 @@ export interface RendererConfig {
  * - 创建和配置 3D 场景
  * - 添加光照
  * - 处理窗口大小调整
+ * - 处理 WebGL 上下文丢失和恢复
  * 
  * @class Renderer
  */
@@ -45,7 +46,10 @@ export class Renderer {
   public scene: THREE.Scene
   /** 透视相机实例 */
   public camera: THREE.PerspectiveCamera
-
+  /** 上下文丢失回调 */
+  private onContextLostCallback: (() => void) | null = null
+  /** 上下文恢复回调 */
+  private onContextRestoredCallback: (() => void) | null = null
   /**
    * 构造函数，初始化渲染器
    * 
@@ -66,6 +70,51 @@ export class Renderer {
     this.camera = this.createCamera(config.width, config.height)
     this.renderer = this.createRenderer(config)
     this.setupLights()
+    this.setupContextHandlers()
+  }
+
+  /**
+   * 设置 WebGL 上下文事件处理器
+   * 
+   * @private
+   */
+  private setupContextHandlers(): void {
+    const canvas = this.renderer.domElement
+
+    // 监听上下文丢失事件
+    canvas.addEventListener('webglcontextlost', (event) => {
+      event.preventDefault()
+      console.warn('WebGL 上下文丢失')
+      if (this.onContextLostCallback) {
+        this.onContextLostCallback()
+      }
+    }, false)
+
+    // 监听上下文恢复事件
+    canvas.addEventListener('webglcontextrestored', () => {
+      console.info('WebGL 上下文已恢复，正在重新初始化...')
+      if (this.onContextRestoredCallback) {
+        this.onContextRestoredCallback()
+      }
+    }, false)
+  }
+
+  /**
+   * 设置上下文丢失回调
+   * 
+   * @param callback - 上下文丢失时的回调函数
+   */
+  setContextLostCallback(callback: () => void): void {
+    this.onContextLostCallback = callback
+  }
+
+  /**
+   * 设置上下文恢复回调
+   * 
+   * @param callback - 上下文恢复时的回调函数
+   */
+  setContextRestoredCallback(callback: () => void): void {
+    this.onContextRestoredCallback = callback
   }
 
   /**

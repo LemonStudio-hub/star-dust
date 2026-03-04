@@ -79,7 +79,10 @@ export class NoiseTexture {
   private precompute(): Float32Array {
     try {
       console.log('开始预计算3D噪声纹理...')
-      const startTime = performance.now()
+      
+      // 兼容性检查：获取高精度时间
+      const hasPerformance = typeof performance !== 'undefined' && performance.now
+      const startTime = hasPerformance ? performance.now() : Date.now()
       
       // 创建 FBM 噪声生成器
       const fbm = new FBMNoise(6, 0.65, 2.5)
@@ -154,7 +157,7 @@ export class NoiseTexture {
       }
     }
     
-    const elapsed = performance.now() - startTime
+    const elapsed = (hasPerformance ? performance.now() : Date.now()) - startTime
       console.log(`3D噪声纹理预计算完成，耗时: ${elapsed.toFixed(2)}ms`)
       
       return curlData

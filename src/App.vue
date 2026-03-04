@@ -16,6 +16,31 @@
           </div>
           
           <div class="dashboard-body">
+            <!-- 性能监控 -->
+            <div class="performance-section">
+              <div class="performance-title">性能监控</div>
+              <div class="performance-grid">
+                <div class="performance-item">
+                  <span class="performance-label">FPS</span>
+                  <span class="performance-value" :class="fpsClass">{{ perfMetrics.fps }}</span>
+                </div>
+                <div class="performance-item">
+                  <span class="performance-label">帧时间</span>
+                  <span class="performance-value">{{ perfMetrics.frameTime.toFixed(1) }} ms</span>
+                </div>
+                <div class="performance-item">
+                  <span class="performance-label">粒子数量</span>
+                  <span class="performance-value">{{ particleConfig.count.toLocaleString() }}</span>
+                </div>
+                <div class="performance-item">
+                  <span class="performance-label">状态</span>
+                  <span class="performance-value status-badge" :class="perfMetrics.status">
+                    {{ perfMetrics.statusText }}
+                  </span>
+                </div>
+              </div>
+            </div>
+
             <!-- 粒子数量 -->
             <div class="control-group">
               <label class="control-label">
@@ -112,7 +137,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, reactive } from 'vue'
+import { ref, onMounted, onUnmounted, reactive, computed } from 'vue'
 import { AppManager } from './modules/AppManager'
 
 /**
@@ -154,6 +179,31 @@ const particleConfig = reactive({
  * 默认配置（用于重置）
  */
 const defaultConfig = { ...particleConfig }
+
+/**
+ * 性能监控数据
+ */
+const perfMetrics = reactive({
+  fps: 60,
+  frameTime: 16.67,
+  lastFrameTime: 0,
+  frameCount: 0,
+  fpsUpdateInterval: 500, // 每 500ms 更新一次 FPS
+  lastFpsUpdate: 0,
+  status: 'good',
+  statusText: '流畅',
+  running: true,
+  isFirstFrame: true
+})
+
+/**
+ * FPS 状态类名
+ */
+const fpsClass = computed(() => {
+  if (perfMetrics.fps >= 50) return 'fps-good'
+  if (perfMetrics.fps >= 30) return 'fps-medium'
+  return 'fps-poor'
+})
 
 /**
  * 应用管理器实例
@@ -244,7 +294,68 @@ onMounted(() => {
     container.value.addEventListener('click', handleClick)
     container.value.addEventListener('touchend', handleClick)
   }
+
+  // 初始化性能监控
+  perfMetrics.lastFrameTime = performanceNow()
+  perfMetrics.lastFpsUpdate = performanceNow()
+  requestAnimationFrame(updatePerformance)
 })
+
+/**
+ * 获取当前时间（兼容性处理）
+ */
+const performanceNow = (): number => {
+  if (typeof window !== 'undefined' && window.performance && window.performance.now) {
+    return window.performance.now()
+  }
+  return Date.now()
+}
+
+/**
+ * 更新性能监控
+ */
+const updatePerformance = (): void => {
+  if (!perfMetrics.running) {
+    return
+  }
+
+  const now = performanceNow()
+  
+  // 跳过第一帧，避免显示异常的帧时间
+  if (perfMetrics.isFirstFrame) {
+    perfMetrics.lastFrameTime = now
+    perfMetrics.lastFpsUpdate = now
+    perfMetrics.isFirstFrame = false
+    requestAnimationFrame(updatePerformance)
+    return
+  }
+
+  const delta = now - perfMetrics.lastFrameTime
+  perfMetrics.lastFrameTime = now
+  perfMetrics.frameTime = delta
+  perfMetrics.frameCount++
+
+  // 定期更新 FPS 显示
+  if (now - perfMetrics.lastFpsUpdate >= perfMetrics.fpsUpdateInterval) {
+    perfMetrics.fps = Math.round((perfMetrics.frameCount * 1000) / (now - perfMetrics.lastFpsUpdate))
+    perfMetrics.frameCount = 0
+    perfMetrics.lastFpsUpdate = now
+
+    // 更新状态
+    if (perfMetrics.fps >= 50) {
+      perfMetrics.status = 'good'
+      perfMetrics.statusText = '流畅'
+    } else if (perfMetrics.fps >= 30) {
+      perfMetrics.status = 'medium'
+      perfMetrics.statusText = '一般'
+    } else {
+      perfMetrics.status = 'poor'
+      perfMetrics.statusText = '卡顿'
+    }
+  }
+
+  requestAnimationFrame(updatePerformance)
+}
 
 /**
  * 组件卸载时的清理
@@ -263,6 +374,9 @@ onUnmounted(() => {
     container.value.removeEventListener('click', handleClick)
     container.value.removeEventListener('touchend', handleClick)
   }
+
+  // 停止性能监控
+  perfMetrics.running = false
 })
 </script>
 
@@ -418,6 +532,129 @@ canvas {
   padding: 28px;
   max-height: 60vh;
   overflow-y: auto;
+}
+
+/**
+ * 性能监控部分
+ */
+.performance-section {
+  margin-bottom: 28px;
+  padding: 20px;
+  background: linear-gradient(
+    135deg,
+    rgba(99, 102, 241, 0.15) 0%,
+    rgba(168, 85, 247, 0.15) 50%,
+    rgba(236, 72, 153, 0.15) 100%
+  );
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 16px;
+}
+
+/**
+ * 性能监控标题
+ */
+.performance-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.9);
+  margin-bottom: 16px;
+  letter-spacing: 0.3px;
+}
+
+/**
+ * 性能监控网格
+ */
+.performance-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+}
+
+/**
+ * 性能监控项
+ */
+.performance-item {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px;
+  background: rgba(0, 0, 0, 0.2);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  transition: all 0.3s ease;
+}
+
+.performance-item:hover {
+  background: rgba(0, 0, 0, 0.3);
+  border-color: rgba(255, 255, 255, 0.15);
+}
+
+/**
+ * 性能监控标签
+ */
+.performance-label {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.6);
+  font-weight: 500;
+  letter-spacing: 0.2px;
+}
+
+/**
+ * 性能监控值
+ */
+.performance-value {
+  font-size: 18px;
+  font-weight: 700;
+  color: #ffffff;
+  font-feature-settings: 'tnum' 1;
+  letter-spacing: -0.3px;
+}
+
+/**
+ * FPS 状态样式 - 流畅
+ */
+.fps-good {
+  color: #10b981;
+}
+
+/**
+ * FPS 状态样式 - 一般
+ */
+.fps-medium {
+  color: #f59e0b;
+}
+
+/**
+ * FPS 状态样式 - 卡顿
+ */
+.fps-poor {
+  color: #ef4444;
+}
+
+/**
+ * 状态徽章
+ */
+.status-badge {
+  font-size: 14px;
+  padding: 2px 8px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.1);
+  font-weight: 600;
+}
+
+.status-badge.good {
+  background: rgba(16, 185, 129, 0.2);
+  color: #10b981;
+}
+
+.status-badge.medium {
+  background: rgba(245, 158, 11, 0.2);
+  color: #f59e0b;
+}
+
+.status-badge.poor {
+  background: rgba(239, 68, 68, 0.2);
+  color: #ef4444;
 }
 
 /**

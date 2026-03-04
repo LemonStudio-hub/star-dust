@@ -52,7 +52,7 @@ export class MouseInteraction {
    * @private
    */
   private setup(): void {
-    window.addEventListener('mousemove', this.handleMouseMove)
+    this.container.addEventListener('mousemove', this.handleMouseMove)
   }
 
   /**
@@ -60,6 +60,7 @@ export class MouseInteraction {
    * 
    * 将鼠标在容器中的位置转换为归一化坐标 [-1, 1]，
    * 然后映射到旋转角度 [-π/2, π/2]。
+   * 只有当鼠标在容器内时才会触发。
    * 
    * @param event - 鼠标移动事件
    * @private
@@ -85,7 +86,7 @@ export class MouseInteraction {
    * 移除事件监听器。
    */
   dispose(): void {
-    window.removeEventListener('mousemove', this.handleMouseMove)
+    this.container.removeEventListener('mousemove', this.handleMouseMove)
   }
 }
 
@@ -131,7 +132,7 @@ export class TouchInteraction {
    * @private
    */
   private setup(): void {
-    window.addEventListener('touchmove', this.handleTouchMove, { passive: true })
+    this.container.addEventListener('touchmove', this.handleTouchMove, { passive: true })
   }
 
   /**
@@ -139,11 +140,17 @@ export class TouchInteraction {
    * 
    * 将触摸点在容器中的位置转换为归一化坐标 [-1, 1]，
    * 然后映射到旋转角度 [-π/2, π/2]。
+   * 只有当触摸在容器内时才会触发。
    * 
    * @param event - 触摸移动事件
    * @private
    */
   private handleTouchMove = (event: TouchEvent): void => {
+    // 检查是否有触摸点
+    if (event.touches.length === 0) {
+      return
+    }
+
     const rect = this.container.getBoundingClientRect()
     const touch = event.touches[0]
     
@@ -165,7 +172,7 @@ export class TouchInteraction {
    * 移除事件监听器。
    */
   dispose(): void {
-    window.removeEventListener('touchmove', this.handleTouchMove)
+    this.container.removeEventListener('touchmove', this.handleTouchMove)
   }
 }
 

@@ -32,6 +32,28 @@ export interface AppConfig {
 }
 
 /**
+ * 配置验证规则接口
+ * 
+ * @interface ValidationRule
+ */
+interface ValidationRule {
+  min: number
+  max: number
+  name: string
+}
+
+/**
+ * 配置验证规则
+ */
+const VALIDATION_RULES: Record<keyof AppConfig, ValidationRule> = {
+  particleCount: { min: 1000, max: 200000, name: '粒子数量' },
+  particleSize: { min: 0.1, max: 10, name: '粒子大小' },
+  boundsRadius: { min: 5, max: 500, name: '边界半径' },
+  velocityScale: { min: 0.001, max: 2, name: '速度缩放' },
+  maxSpeed: { min: 0.001, max: 5, name: '最大速度' }
+}
+
+/**
  * 应用管理器类
  * 
  * 协调所有模块，管理应用的生命周期和主循环。
@@ -71,6 +93,8 @@ export class AppManager {
   private time: number
   /** 动画帧 ID */
   private animationFrameId: number
+  /** 保存的配置（用于上下文恢复） */
+  private savedConfig: AppConfig | null = null
 
   /**
    * 构造函数，初始化应用
@@ -93,6 +117,12 @@ export class AppManager {
    */
   constructor(container: HTMLElement, canvas: HTMLCanvasElement, config: AppConfig) {
     try {
+      // 验证配置参数
+      this.validateConfig(config)
+
+      // 保存配置用于上下文恢复
+      this.savedConfig = { ...config }
+
       this.container = container
       this.canvas = canvas
       this.targetRotation = new THREE.Vector2()
@@ -100,9 +130,41 @@ export class AppManager {
       this.time = 0
 
       this.initialize(config)
+      this.setupContextHandlers()
     } catch (error) {
       console.error('应用初始化失败:', error)
       throw new Error(`应用初始化失败: ${error instanceof Error ? error.message : String(error)}`)
+    }
+  }
+
+  /**
+   * 验证配置参数
+   * 
+   * 检查所有配置参数是否在有效范围内。
+   * 如果参数超出范围，会抛出错误。
+   * 
+   * @param config - 待验证的配置参数
+   * @throws {Error} 当配置参数无效时抛出错误
+   * @private
+   */
+  private validateConfig(config: AppConfig): void {
+    for (const [key, value] of Object.entries(config)) {
+      const rule = VALIDATION_RULES[key as keyof AppConfig]
+      
+      if (!rule) {
+        console.warn(`未知的配置参数: ${key}`)
+        continue
+      }
+
+      if (typeof value !== 'number' || isNaN(value)) {
+        throw new Error(`${rule.name} 必须是有效的数字，当前值: ${value}`)
+      }
+
+      if (value < rule.min || value > rule.max) {
+        throw new Error(
+          `${rule.name} 超出有效范围 [${rule.min}, ${rule.max}]，当前值: ${value}`
+        )
+      }
     }
   }
 
@@ -197,6 +259,89 @@ export class AppManager {
 
     // 监听窗口大小变化
     window.addEventListener('resize', this.handleResize)
+  }
+
+  /**
+   * 设置 WebGL 上下文事件处理器
+   * 
+   * @private
+   */
+  private setupContextHandlers(): void {
+    // 设置上下文丢失回调
+    this.renderer.setContextLostCallback(() => {
+      console.warn('WebGL 上下文丢失，停止渲染循环')
+      cancelAnimationFrame(this.animationFrameId)
+    })
+
+    // 设置上下文恢复回调
+    this.renderer.setContextRestoredCallback(() => {
+      this.handleContextRestored()
+    })
+  }
+
+  /**
+   * 处理 WebGL 上下文恢复
+   * 
+   * 重新初始化所有资源以恢复渲染。
+   * 
+   * @private
+   */
+  private handleContextRestored(): void {
+    try {
+      if (!this.savedConfig) {
+        console.error('没有保存的配置，无法恢复上下文')
+        return
+      }
+
+      console.info('开始重新初始化应用资源...')
+
+      // 停止当前的渲染循环
+      cancelAnimationFrame(this.animationFrameId)
+
+      // 清理旧资源（但不释放交互系统）
+      this.particleSystem.dispose(this.renderer.scene)
+      this.noiseTexture.dispose()
+      this.renderer.dispose()
+
+      // 重新初始化
+      this.initialize(this.savedConfig)
+
+      console.info('应用资源重新初始化完成')
+    } catch (error) {
+      console.error('上下文恢复失败:', error)
+      // 尝试恢复到最小配置
+      this.tryRecovery()
+    }
+  }
+
+  /**
+   * 尝试恢复到最小配置
+   * 
+   * @private
+   */
+  private tryRecovery(): void {
+    try {
+      console.warn('尝试使用最小配置恢复...')
+      const minConfig: AppConfig = {
+        particleCount: 5000,
+        particleSize: 1.0,
+        boundsRadius: 30,
+        velocityScale: 0.05,
+        maxSpeed: 0.1
+      }
+      this.savedConfig = minConfig
+
+      // 清理资源
+      this.particleSystem.dispose(this.renderer.scene)
+      this.noiseTexture.dispose()
+      this.renderer.dispose()
+
+      // 重新初始化
+      this.initialize(minConfig)
+      console.info('使用最小配置恢复成功')
+    } catch (error) {
+      console.error('恢复失败，应用无法继续运行:', error)
+    }
   }
 
   /**
