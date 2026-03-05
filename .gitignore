@@ -12,6 +12,13 @@ dist
 dist-ssr
 *.local
 
+# Rust
+target/
+Cargo.lock
+
+# Generated shader files
+src/modules/shaders/gen/
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

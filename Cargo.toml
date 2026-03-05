@@ -1,0 +1,12 @@
+[package]
+name = "xingchen-shaders"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+naga = { version = "0.20", features = ["wgsl-in", "wgsl-out", "serialize"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+[build-dependencies]
+naga = { version = "0.20", features = ["wgsl-in", "wgsl-out", "serialize"] }
