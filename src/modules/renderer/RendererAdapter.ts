@@ -1,48 +1,56 @@
 /**
  * 渲染器适配器
  * 
- * 自动检测并选择最佳渲染器后端（WebGL 或 WebGPU）。
- * 提供统一的接口，隐藏底层实现细节。
+ * 自动选择最佳的渲染器后端（WebGPU 或 WebGL）。
+ * 支持 WebGPU 到 WebGL 的自动降级。
  * 
  * @module renderer/RendererAdapter
  */
 
-import * as THREE from 'three'
 import { IRenderer, RendererConfig } from './IRenderer'
-import { WebGPURenderer, isWebGPUSupported, createWebGPURenderer } from './WebGPURenderer'
 import { Renderer } from './Renderer'
+import { WebGPURenderer } from './WebGPURenderer'
 
 /**
  * 渲染器类型枚举
  * 
  * @enum RendererType
  */
-export enum RendererType {
+enum RendererType {
   WebGL = 'webgl',
-  WebGPU = 'webgpu',
-  Auto = 'auto'
+  WebGPU = 'webgpu'
 }
 
 /**
  * 渲染器适配器类
  * 
- * 根据配置和浏览器支持自动选择最佳渲染器。
+ * 自动检测并选择最佳渲染器后端。
+ * 如果 WebGPU 不可用，自动降级到 WebGL。
+ * 
+ * 主要功能：
+ * - 检测 WebGPU 支持情况
+ * - 创建 WebGPU 或 WebGL 渲染器
+ * - 提供统一的渲染器接口
+ * - 处理降级逻辑
  * 
  * @class RendererAdapter
- * @implements IRenderer
  */
 export class RendererAdapter implements IRenderer {
-  /** 当前渲染器实例 */
+  /** 实际使用的渲染器实例 */
   private renderer: IRenderer | null = null
   /** 渲染器类型 */
-  private rendererType: RendererType = RendererType.Auto
+  private rendererType: RendererType = RendererType.WebGL
   /** 配置 */
   private config: RendererConfig
+  /** Canvas 元素 */
+  private canvas: HTMLCanvasElement
+  /** 标记是否已释放资源 */
+  private disposed = false
 
   /**
    * 构造函数，初始化渲染器适配器
    * 
-   * @param config - 渲染器配置
+   * @param config - 渲染器配置参数
    * 
    * @example
    * ```typescript
@@ -58,55 +66,62 @@ export class RendererAdapter implements IRenderer {
    */
   constructor(config: RendererConfig) {
     this.config = config
-    console.log('渲染器适配器已创建')
+    this.canvas = config.canvas
   }
 
   /**
    * 初始化渲染器
    * 
-   * 根据 type 配置选择渲染器：
-   * - 'auto': 自动检测并选择最佳渲染器（优先 WebGPU）
-   * - 'webgpu': 强制使用 WebGPU
-   * - 'webgl': 强制使用 WebGL
+   * 根据配置和浏览器支持情况，自动选择最佳渲染器。
    * 
-   * @throws {Error} 当初始化失败时抛出错误
+   * @returns Promise，在初始化完成后解析
    */
   async init(): Promise<void> {
-    const type = this.config.type || RendererType.Auto
-
-    console.log(`正在初始化渲染器，类型: ${type}`)
-
-    if (type === RendererType.WebGPU) {
-      // 强制使用 WebGPU
-      await this.initWebGPU()
-    } else if (type === RendererType.WebGL) {
-      // 强制使用 WebGL
-      this.initWebGL()
-    } else {
-      // 自动选择
-      await this.autoSelectRenderer()
+    if (this.disposed) {
+      throw new Error('渲染器适配器已释放')
     }
 
-    console.log(`✓ 渲染器初始化完成，使用: ${this.rendererType}`)
+    try {
+      // 如果指定了渲染器类型，直接使用
+      if (this.config.type === 'webgl') {
+        this.initWebGL()
+        return
+      } else if (this.config.type === 'webgpu') {
+        await this.initWebGPU()
+        return
+      }
+
+      // 否则自动检测并选择最佳渲染器
+      await this.initAuto()
+    } catch (error) {
+      console.error('渲染器初始化失败:', error)
+      // 如果 WebGPU 初始化失败，降级到 WebGL
+      if (this.rendererType === RendererType.WebGPU) {
+        console.warn('WebGPU 初始化失败，降级到 WebGL...')
+        this.initWebGL()
+      } else {
+        throw new Error(`渲染器初始化失败: ${error instanceof Error ? error.message : String(error)}`)
+      }
+    }
   }
 
   /**
-   * 自动选择渲染器
-   * 
-   * 优先尝试 WebGPU，如果不可用则降级到 WebGL。
+   * 自动检测并选择最佳渲染器
    * 
    * @private
    */
-  private async autoSelectRenderer(): Promise<void> {
-    console.log('正在检测 WebGPU 支持...')
-
-    const webgpuSupported = await isWebGPUSupported()
-
-    if (webgpuSupported) {
-      console.log('✓ WebGPU 受支持，将使用 WebGPU 渲染器')
-      await this.initWebGPU()
+  private async initAuto(): Promise<void> {
+    // 检查 WebGPU 支持
+    if (this.isWebGPUSupported()) {
+      try {
+        await this.initWebGPU()
+        console.log('✓ 使用 WebGPU 渲染器')
+      } catch (error) {
+        console.warn('WebGPU 渲染器初始化失败，降级到 WebGL:', error)
+        this.initWebGL()
+      }
     } else {
-      console.warn('⚠ WebGPU 不受支持，将降级到 WebGL 渲染器')
+      console.log('WebGPU 不支持，使用 WebGL 渲染器')
       this.initWebGL()
     }
   }
@@ -114,20 +129,17 @@ export class RendererAdapter implements IRenderer {
   /**
    * 初始化 WebGPU 渲染器
    * 
-   * @throws {Error} 当 WebGPU 初始化失败时抛出错误
    * @private
    */
   private async initWebGPU(): Promise<void> {
     try {
-      this.renderer = await createWebGPURenderer(this.config)
+      this.renderer = new WebGPURenderer(this.config)
+      await this.renderer.init()
       this.rendererType = RendererType.WebGPU
+      console.log('✓ WebGPU 渲染器已初始化')
     } catch (error) {
-      console.error('WebGPU 初始化失败:', error)
-      console.warn('尝试降级到 WebGL...')
-      
-      // 降级到 WebGL
-      this.initWebGL()
-      this.rendererType = RendererType.WebGL
+      console.error('WebGPU 渲染器初始化失败:', error)
+      throw error
     }
   }
 
@@ -140,10 +152,61 @@ export class RendererAdapter implements IRenderer {
     try {
       this.renderer = new Renderer(this.config)
       this.rendererType = RendererType.WebGL
+      console.log('✓ WebGL 渲染器已初始化')
     } catch (error) {
-      console.error('WebGL 初始化失败:', error)
-      throw new Error(`所有渲染器初始化失败: ${error instanceof Error ? error.message : String(error)}`)
+      console.error('WebGL 渲染器初始化失败:', error)
+      throw error
     }
+  }
+
+  /**
+   * 检测 WebGPU 是否支持
+   * 
+   * @returns 是否支持 WebGPU
+   * @private
+   */
+  private isWebGPUSupported(): boolean {
+    return (
+      typeof navigator !== 'undefined' &&
+      'gpu' in navigator &&
+      (navigator as any).gpu !== null
+    )
+  }
+
+  /**
+   * 获取渲染器实例
+   * 
+   * @returns 渲染器实例
+   */
+  get renderer(): IRenderer {
+    if (!this.renderer) {
+      throw new Error('渲染器未初始化')
+    }
+    return this.renderer
+  }
+
+  /**
+   * 获取 Three.js 场景实例
+   * 
+   * @returns 场景实例
+   */
+  get scene(): THREE.Scene {
+    if (!this.renderer) {
+      throw new Error('渲染器未初始化')
+    }
+    return this.renderer.scene
+  }
+
+  /**
+   * 获取 Three.js 相机实例
+   * 
+   * @returns 相机实例
+   */
+  get camera(): THREE.Camera {
+    if (!this.renderer) {
+      throw new Error('渲染器未初始化')
+    }
+    return this.renderer.camera
   }
 
   /**
@@ -158,7 +221,19 @@ export class RendererAdapter implements IRenderer {
       return
     }
 
-    this.renderer.render(scene, camera)
+    try {
+      this.renderer.render(scene, camera)
+    } catch (error) {
+      console.error('渲染失败:', error)
+      // 如果是 WebGPU 渲染失败，尝试降级到 WebGL
+      if (this.rendererType === RendererType.WebGPU) {
+        console.warn('WebGPU 渲染失败，降级到 WebGL...')
+        this.renderer.dispose()
+        this.initWebGL()
+        // 重新渲染
+        this.renderer.render(scene, camera)
+      }
+    }
   }
 
   /**
@@ -169,6 +244,7 @@ export class RendererAdapter implements IRenderer {
    */
   resize(width: number, height: number): void {
     if (!this.renderer) {
+      console.error('渲染器未初始化')
       return
     }
 
@@ -177,21 +253,31 @@ export class RendererAdapter implements IRenderer {
 
   /**
    * 释放渲染器资源
+   * 
+   * 清理所有资源，防止内存泄漏。
+   * 重复调用此方法是安全的。
    */
   dispose(): void {
-    if (!this.renderer) {
+    if (this.disposed) {
       return
     }
 
-    console.log(`正在释放 ${this.rendererType} 渲染器资源...`)
-    this.renderer.dispose()
-    this.renderer = null
+    try {
+      if (this.renderer) {
+        this.renderer.dispose()
+        this.renderer = null
+      }
+      this.disposed = true
+      console.log('✓ 渲染器适配器资源已释放')
+    } catch (error) {
+      console.error('释放渲染器适配器资源失败:', error)
+    }
   }
 
   /**
    * 获取渲染器类型
    * 
-   * @returns 当前渲染器类型
+   * @returns 'webgl' 或 'webgpu'
    */
   getType(): 'webgl' | 'webgpu' {
     return this.rendererType
@@ -207,59 +293,19 @@ export class RendererAdapter implements IRenderer {
   }
 
   /**
-   * 获取 Three.js 渲染器实例
+   * 获取当前渲染器信息
    * 
-   * @returns Three.js 渲染器实例
+   * @returns 渲染器信息对象
    */
-  get renderer(): THREE.WebRenderer {
-    return (this.renderer as any)?.renderer
-  }
-
-  /**
-   * 获取 Three.js 场景实例
-   * 
-   * @returns Three.js 场景实例
-   */
-  get scene(): THREE.Scene {
-    if (!this.renderer) {
-      throw new Error('渲染器未初始化')
+  getInfo(): {
+    type: 'webgl' | 'webgpu'
+    initialized: boolean
+    webgpuSupported: boolean
+  } {
+    return {
+      type: this.rendererType,
+      initialized: this.isInitialized(),
+      webgpuSupported: this.isWebGPUSupported()
     }
-    return this.renderer.scene
   }
-
-  /**
-   * 获取 Three.js 相机实例
-   * 
-   * @returns Three.js 相机实例
-   */
-  get camera(): THREE.Camera {
-    if (!this.renderer) {
-      throw new Error('渲染器未初始化')
-    }
-    return this.renderer.camera
-  }
-
-  /**
-   * 获取底层渲染器实例
-   * 
-   * @returns 底层渲染器实例（WebGLRenderer 或 WebGPURenderer）
-   */
-  get underlyingRenderer(): IRenderer {
-    if (!this.renderer) {
-      throw new Error('渲染器未初始化')
-    }
-    return this.renderer
-  }
-}
-
-/**
- * 创建渲染器适配器工厂函数
- * 
- * @param config - 渲染器配置
- * @returns 渲染器适配器实例
- */
-export async function createRendererAdapter(config: RendererConfig): Promise<RendererAdapter> {
-  const adapter = new RendererAdapter(config)
-  await adapter.init()
-  return adapter
 }

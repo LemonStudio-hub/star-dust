@@ -12,6 +12,7 @@ import { NoiseTexture } from './noise/NoiseTexture'
 import { ParticleSystem, ParticleConfig } from './particles/ParticleSystem'
 import { MouseInteraction, TouchInteraction, GestureHandler } from './interaction'
 import { Renderer, RendererConfig } from './renderer/Renderer'
+import { RendererAdapter } from './renderer/RendererAdapter'
 
 /**
  * 应用配置接口
@@ -79,7 +80,7 @@ export class AppManager {
   /** 手势处理器 */
   private gestureHandler: GestureHandler
   /** 渲染器 */
-  private renderer: Renderer
+  private renderer: RendererAdapter
   /** 容器元素 */
   private container: HTMLElement
   /** Canvas 元素 */
@@ -129,7 +130,10 @@ export class AppManager {
       this.currentRotation = new THREE.Vector2()
       this.time = 0
 
-      this.initialize(config)
+      // 异步初始化
+      this.initialize(config).catch(error => {
+        console.error('异步初始化失败:', error)
+      })
       this.setupContextHandlers()
     } catch (error) {
       console.error('应用初始化失败:', error)
@@ -181,15 +185,22 @@ export class AppManager {
    * @param config - 应用配置
    * @private
    */
-  private initialize(config: AppConfig): void {
+  private async initialize(config: AppConfig): Promise<void> {
     try {
-      // 步骤 1：初始化渲染器
+      // 步骤 1：初始化渲染器（自动选择 WebGPU 或 WebGL）
       const rendererConfig: RendererConfig = {
         canvas: this.canvas,
         width: this.container.clientWidth,
-        height: this.container.clientHeight
+        height: this.container.clientHeight,
+        type: 'auto'  // 自动选择最佳渲染器
       }
-      this.renderer = new Renderer(rendererConfig)
+      this.renderer = new RendererAdapter(rendererConfig)
+      await this.renderer.init()
+
+      // 打印渲染器信息
+      const rendererInfo = this.renderer.getInfo()
+      console.log(`渲染器类型: ${rendererInfo.type.toUpperCase()}`)
+      console.log(`WebGPU 支持: ${rendererInfo.webgpuSupported ? '是' : '否'}`)
 
       // 步骤 2：预计算噪声纹理
       console.log('初始化噪声纹理...')

@@ -182,11 +182,6 @@ export class DoubleBufferManager {
 
     console.log('正在释放双缓冲管理器资源...')
 
-    if (this.fence) {
-      this.fence.destroy()
-      this.fence = null
-    }
-
     this.disposed = true
     console.log('✓ 双缓冲管理器资源已释放')
   }

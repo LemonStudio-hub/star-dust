@@ -18,7 +18,7 @@ import * as THREE from 'three'
  */
 export interface IRenderer {
   /** Three.js 渲染器实例（兼容性） */
-  renderer: THREE.WebRenderer
+  renderer: any
   
   /** Three.js 场景实例 */
   scene: THREE.Scene
