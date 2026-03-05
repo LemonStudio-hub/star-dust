@@ -212,12 +212,16 @@ fn main(@builtin(vertex_index) vertexIndex: u32) -> VertexOutput {
   let viewPosition = camera.viewMatrix * worldPosition;
   output.position = camera.projectionMatrix * viewPosition;
   
-  let distance = length(viewPosition.xyz);
-  let attenuation = 1000.0 / max(distance, 1.0);
-  output.pointSize = render.particleSize * attenuation;
-  output.pointSize = clamp(output.pointSize, 1.0, 10.0);
+  // 调试：使用固定的红色和固定的点大小
+  output.color = vec3<f32>(1.0, 0.0, 0.0); // 红色
+  output.pointSize = 5.0; // 固定点大小
   
-  output.color = particle.color;
+  // 原始代码（注释掉用于调试）
+  // let distance = length(viewPosition.xyz);
+  // let attenuation = 1000.0 / max(distance, 1.0);
+  // output.pointSize = render.particleSize * attenuation;
+  // output.pointSize = clamp(output.pointSize, 1.0, 10.0);
+  // output.color = particle.color;
   
   return output;
 }
@@ -239,7 +243,11 @@ struct FragmentInput {
 
 @fragment
 fn main(input: FragmentInput) -> @location(0) vec4<f32> {
-  return vec4<f32>(input.color, 0.9);
+  // 调试：输出完全不透明的红色
+  return vec4<f32>(1.0, 0.0, 0.0, 1.0);
+  
+  // 原始代码（注释掉用于调试）
+  // return vec4<f32>(input.color, 0.9);
 }
 `
   }
