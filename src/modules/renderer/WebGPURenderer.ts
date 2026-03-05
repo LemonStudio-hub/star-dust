@@ -238,7 +238,48 @@ export class WebGPURenderer implements IRenderer {
 
     // 创建粒子缓冲区
     console.log('创建粒子缓冲区...')
-    this.particleBuffer = new GPUParticleBuffer(this.device, this.particleCount, this.boundsRadius)
+    // 生成粒子数据
+    const particles = []
+    const colors = [
+      [1, 0.2, 0.5], // 粉色
+      [0.2, 0.8, 1], // 蓝色
+      [1, 0.8, 0.2], // 金色
+      [0.5, 1, 0.3], // 绿色
+      [0.8, 0.3, 1]  // 紫色
+    ]
+    
+    for (let i = 0; i < this.particleCount; i++) {
+      // 随机位置（在球体内）
+      const theta = Math.random() * Math.PI * 2
+      const phi = Math.acos(2 * Math.random() - 1)
+      const radius = Math.cbrt(Math.random()) * this.boundsRadius
+      
+      const x = radius * Math.sin(phi) * Math.cos(theta)
+      const y = radius * Math.sin(phi) * Math.sin(theta)
+      const z = radius * Math.cos(phi)
+      
+      // 随机速度
+      const velocity = [
+        (Math.random() - 0.5) * 0.5,
+        (Math.random() - 0.5) * 0.5,
+        (Math.random() - 0.5) * 0.5
+      ]
+      
+      // 随机颜色
+      const color = colors[Math.floor(Math.random() * colors.length)]
+      
+      particles.push({
+        position: [x, y, z],
+        velocity: velocity,
+        color: color
+      })
+    }
+    
+    this.particleBuffer = new GPUParticleBuffer(this.device, {
+      count: this.particleCount,
+      particles: particles,
+      doubleBuffer: true
+    })
 
     // 创建计算着色器
     console.log('创建计算着色器...')
@@ -309,7 +350,7 @@ export class WebGPURenderer implements IRenderer {
     const renderPass = commandEncoder.beginRenderPass(renderPassDescriptor)
 
     // 设置渲染管线并绘制粒子
-    this.renderPipeline.render(renderPass)
+    this.renderPipeline.render(renderPass, this.particleCount)
 
     renderPass.end()
 
