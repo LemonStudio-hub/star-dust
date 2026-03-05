@@ -161,21 +161,3 @@ fn updateParticles(@builtin(global_invocation_id) globalId: vec3<u32>) {
   // 写入输出缓冲区
   particlesOut[index] = particle;
 }
-
-// 未来版本：使用噪声纹理采样
-// fn sampleNoiseTexture(position: vec3<f32>, time: f32) -> vec3<f32> {
-//   let texSize = vec3<f32>(64.0, 64.0, 64.0);
-//   let scale = 0.008;
-//   let timeScale = 0.0001;
-//   
-//   // 归一化到 [0, 1]
-//   let nx = ((position.x * scale) % 1.0 + 1.0) % 1.0;
-//   let ny = ((position.y * scale) % 1.0 + 1.0) % 1.0;
-//   let nz = ((position.z * scale + time * timeScale) % 1.0 + 1.0) % 1.0;
-//   
-//   // 采样纹理
-//   let coord = vec3<f32>(nx, ny, nz);
-//   let noise = textureSample(noiseTexture, noiseSampler, coord);
-//   
-//   return noise * 2.0 - 1.0; // 归一化到 [-1, 1]
-// }

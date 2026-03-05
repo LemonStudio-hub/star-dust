@@ -186,9 +186,6 @@ export class LODManager {
       return this.currentParticleCount
     }
 
-    // 总是更新上一帧位置
-    this.lastCameraPosition.copy(cameraPosition)
-
     // 检查摄像机是否移动超过阈值
     const distanceMoved = cameraPosition.distanceTo(this.lastCameraPosition)
     if (distanceMoved < this.cameraThreshold) {
@@ -196,6 +193,9 @@ export class LODManager {
       this.updateTransition()
       return this.currentParticleCount
     }
+
+    // 更新上一帧位置（在距离检查之后）
+    this.lastCameraPosition.copy(cameraPosition)
 
     // 计算平均距离
     const averageDistance = this.calculateAverageDistance(cameraPosition, boundsRadius)

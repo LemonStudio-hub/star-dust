@@ -160,13 +160,11 @@ export class DoubleBufferManager {
    */
   getStatus(): {
     currentBufferIndex: number
-    signaledValue: bigint
     isDoubleBuffer: boolean
     particleCount: number
   } {
     return {
       currentBufferIndex: this.currentBufferIndex,
-      signaledValue: this.signaledValue,
       isDoubleBuffer: this.particleBuffer['doubleBuffer'] || false,
       particleCount: this.particleBuffer.count
     }

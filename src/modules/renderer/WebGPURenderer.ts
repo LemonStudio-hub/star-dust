@@ -325,7 +325,12 @@ export class WebGPURenderer implements IRenderer {
     }
 
     // 更新相机参数
-    this.renderPipeline.updateCamera(camera as THREE.PerspectiveCamera)
+    const perspCamera = camera as THREE.PerspectiveCamera
+    this.renderPipeline.updateCameraUniforms(
+      perspCamera.matrixWorldInverse.toArray() as Float32Array,
+      perspCamera.projectionMatrix.toArray() as Float32Array,
+      new Float32Array([perspCamera.position.x, perspCamera.position.y, perspCamera.position.z])
+    )
 
     // 创建命令编码器
     const commandEncoder = this.device.createCommandEncoder()

@@ -275,7 +275,10 @@ export class AppManager {
         this.targetRotation.y = y
       },
       (scale) => {
-        this.particleSystem.points.scale.multiplyScalar(scale)
+        // 缩放功能仅在 WebGL 模式下可用
+        if (this.particleSystem) {
+          this.particleSystem.points.scale.multiplyScalar(scale)
+        }
       }
     )
 
