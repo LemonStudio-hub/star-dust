@@ -420,6 +420,10 @@ export class AppManager {
         // 应用旋转到相机
         this.renderer.camera.rotation.x = this.currentRotation.x
         this.renderer.camera.rotation.y = this.currentRotation.y
+        this.renderer.camera.rotation.y += 0.001  // 自动旋转
+
+        // 更新相机矩阵，确保视图矩阵正确
+        this.renderer.camera.updateMatrixWorld()
       }
 
       // 渲染场景

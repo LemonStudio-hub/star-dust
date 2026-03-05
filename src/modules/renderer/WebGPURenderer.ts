@@ -326,6 +326,8 @@ export class WebGPURenderer implements IRenderer {
 
     // 更新相机参数
     const perspCamera = camera as THREE.PerspectiveCamera
+    // 确保相机矩阵是最新的
+    perspCamera.updateMatrixWorld()
     this.renderPipeline.updateCameraUniforms(
       perspCamera.matrixWorldInverse.toArray() as Float32Array,
       perspCamera.projectionMatrix.toArray() as Float32Array,

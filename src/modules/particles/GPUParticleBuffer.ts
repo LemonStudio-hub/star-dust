@@ -122,30 +122,28 @@ export class GPUParticleBuffer {
 
     // 填充数据
     const mappedData = new Float32Array(buffer.getMappedRange())
-    
+
     for (let i = 0; i < particles.length; i++) {
       const particle = particles[i]
-      const offset = i * 12 // 每个粒子 12 个 float32 (position 3 + velocity 3 + color 3 + padding 1)
+      const offset = i * 12 // 每个粒子 12 个 float32 (48 字节 / 4)
 
-      // Position (3 floats)
+      // Position (3 floats) + Padding (1 float) - offset 0-3
       mappedData[offset + 0] = particle.position[0]
       mappedData[offset + 1] = particle.position[1]
       mappedData[offset + 2] = particle.position[2]
+      mappedData[offset + 3] = 0.0 // padding
 
-      // Velocity (3 floats)
-      mappedData[offset + 3] = particle.velocity[0]
-      mappedData[offset + 4] = particle.velocity[1]
-      mappedData[offset + 5] = particle.velocity[2]
+      // Velocity (3 floats) + Padding (1 float) - offset 4-7
+      mappedData[offset + 4] = particle.velocity[0]
+      mappedData[offset + 5] = particle.velocity[1]
+      mappedData[offset + 6] = particle.velocity[2]
+      mappedData[offset + 7] = 0.0 // padding
 
-      // Color (3 floats)
-      mappedData[offset + 6] = particle.color[0]
-      mappedData[offset + 7] = particle.color[1]
-      mappedData[offset + 8] = particle.color[2]
-
-      // Padding (1 float)
-      mappedData[offset + 9] = 0.0
-      mappedData[offset + 10] = 0.0
-      mappedData[offset + 11] = 0.0
+      // Color (3 floats) + Padding (1 float) - offset 8-11
+      mappedData[offset + 8] = particle.color[0]
+      mappedData[offset + 9] = particle.color[1]
+      mappedData[offset + 10] = particle.color[2]
+      mappedData[offset + 11] = 0.0 // padding
     }
 
     // 取消映射
@@ -234,8 +232,8 @@ export class GPUParticleBuffer {
       const offset = i * 12
       particles.push({
         position: [mappedData[offset + 0], mappedData[offset + 1], mappedData[offset + 2]],
-        velocity: [mappedData[offset + 3], mappedData[offset + 4], mappedData[offset + 5]],
-        color: [mappedData[offset + 6], mappedData[offset + 7], mappedData[offset + 8]]
+        velocity: [mappedData[offset + 4], mappedData[offset + 5], mappedData[offset + 6]],
+        color: [mappedData[offset + 8], mappedData[offset + 9], mappedData[offset + 10]]
       })
     }
 
@@ -265,26 +263,28 @@ export class GPUParticleBuffer {
 
     // 创建临时数据数组
     const data = new Float32Array(this.count * 12)
-    
+
     for (let i = 0; i < particles.length; i++) {
       const particle = particles[i]
       const offset = i * 12
 
+      // Position (3 floats) + Padding (1 float) - offset 0-3
       data[offset + 0] = particle.position[0]
       data[offset + 1] = particle.position[1]
       data[offset + 2] = particle.position[2]
+      data[offset + 3] = 0.0 // padding
 
-      data[offset + 3] = particle.velocity[0]
-      data[offset + 4] = particle.velocity[1]
-      data[offset + 5] = particle.velocity[2]
+      // Velocity (3 floats) + Padding (1 float) - offset 4-7
+      data[offset + 4] = particle.velocity[0]
+      data[offset + 5] = particle.velocity[1]
+      data[offset + 6] = particle.velocity[2]
+      data[offset + 7] = 0.0 // padding
 
-      data[offset + 6] = particle.color[0]
-      data[offset + 7] = particle.color[1]
-      data[offset + 8] = particle.color[2]
-
-      data[offset + 9] = 0.0
-      data[offset + 10] = 0.0
-      data[offset + 11] = 0.0
+      // Color (3 floats) + Padding (1 float) - offset 8-11
+      data[offset + 8] = particle.color[0]
+      data[offset + 9] = particle.color[1]
+      data[offset + 10] = particle.color[2]
+      data[offset + 11] = 0.0 // padding
     }
 
     // 写入到指定缓冲区
