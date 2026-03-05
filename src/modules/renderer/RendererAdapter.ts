@@ -108,16 +108,31 @@ export class RendererAdapter implements IRenderer {
   /**
    * 自动检测并选择最佳渲染器
    * 
+   * 策略：优先使用 WebGPU，只在以下情况降级到 WebGL：
+   * 1. WebGPU API 不支持
+   * 2. WebGPU 初始化失败
+   * 3. 移动设备且 WebGPU 支持不完善（可选）
+   * 
    * @private
    */
   private async initAuto(): Promise<void> {
-    // 检查 WebGPU 支持
-    if (this.isWebGPUSupported()) {
+    const webgpuSupported = this.isWebGPUSupported()
+    const isMobileDevice = this.isMobileDevice()
+    
+    console.log('渲染器自动选择策略：')
+    console.log(`  - WebGPU 支持: ${webgpuSupported ? '是' : '否'}`)
+    console.log(`  - 移动设备: ${isMobileDevice ? '是' : '否'}`)
+    
+    // 优先尝试 WebGPU
+    if (webgpuSupported) {
       try {
+        console.log('正在尝试初始化 WebGPU 渲染器...')
         await this.initWebGPU()
-        console.log('✓ 使用 WebGPU 渲染器')
+        console.log('✓ WebGPU 渲染器已启用（高性能模式）')
+        return
       } catch (error) {
         console.warn('WebGPU 渲染器初始化失败，降级到 WebGL:', error)
+        console.log('降级原因：WebGPU 初始化失败')
         this.initWebGL()
       }
     } else {
@@ -171,6 +186,32 @@ export class RendererAdapter implements IRenderer {
       'gpu' in navigator &&
       (navigator as any).gpu !== null
     )
+  }
+
+  /**
+   * 检测是否为移动设备
+   * 
+   * @returns 是否为移动设备
+   * @private
+   */
+  private isMobileDevice(): boolean {
+    // 检测用户代理字符串
+    const userAgent = navigator.userAgent.toLowerCase()
+    const mobileKeywords = [
+      'android', 'iphone', 'ipad', 'ipod',
+      'mobile', 'touch', 'tablet',
+      'windows phone', 'blackberry'
+    ]
+    
+    const isMobileUA = mobileKeywords.some(keyword => userAgent.includes(keyword))
+    
+    // 检查触摸支持
+    const hasTouchSupport = 'ontouchstart' in window || navigator.maxTouchPoints > 0
+    
+    // 检查屏幕尺寸（小屏幕通常是移动设备）
+    const isSmallScreen = window.innerWidth <= 768
+    
+    return isMobileUA || (hasTouchSupport && isSmallScreen)
   }
 
   /**
@@ -301,11 +342,15 @@ export class RendererAdapter implements IRenderer {
     type: 'webgl' | 'webgpu'
     initialized: boolean
     webgpuSupported: boolean
+    isMobile: boolean
+    wasDowngraded: boolean
   } {
     return {
       type: this.rendererType,
       initialized: this.isInitialized(),
-      webgpuSupported: this.isWebGPUSupported()
+      webgpuSupported: this.isWebGPUSupported(),
+      isMobile: this.isMobileDevice(),
+      wasDowngraded: this.isWebGPUSupported() && this.rendererType === RendererType.WebGL
     }
   }
 }

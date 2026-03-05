@@ -488,4 +488,15 @@ export class AppManager {
       console.error('更新配置时发生错误:', error)
     }
   }
+
+  /**
+   * 获取渲染器信息
+   * 
+   * 返回当前使用的渲染器信息，包括类型、初始化状态、WebGPU 支持等。
+   * 
+   * @returns 渲染器信息对象
+   */
+  getRendererInfo() {
+    return this.renderer.getInfo()
+  }
 }

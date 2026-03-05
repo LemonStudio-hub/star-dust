@@ -33,6 +33,12 @@
                   <span class="performance-value">{{ particleConfig.count.toLocaleString() }}</span>
                 </div>
                 <div class="performance-item">
+                  <span class="performance-label">渲染器</span>
+                  <span class="performance-value" :class="rendererInfo.type === 'webgpu' ? 'renderer-webgpu' : 'renderer-webgl'">
+                    {{ rendererInfo.type === 'webgpu' ? 'WebGPU' : 'WebGL' }}
+                  </span>
+                </div>
+                <div class="performance-item">
                   <span class="performance-label">状态</span>
                   <span class="performance-value status-badge" :class="perfMetrics.status">
                     {{ perfMetrics.statusText }}
@@ -197,6 +203,17 @@ const perfMetrics = reactive({
 })
 
 /**
+ * 渲染器信息
+ */
+const rendererInfo = reactive({
+  type: 'webgl' as 'webgl' | 'webgpu',
+  initialized: false,
+  webgpuSupported: false,
+  isMobile: false,
+  wasDowngraded: false
+})
+
+/**
  * FPS 状态类名
  */
 const fpsClass = computed(() => {
@@ -288,6 +305,11 @@ onMounted(() => {
   // 创建并启动应用管理器
   appManager = new AppManager(container.value, canvas.value, config)
   console.log('Application initialized successfully')
+
+  // 获取渲染器信息
+  const info = appManager.getRendererInfo()
+  Object.assign(rendererInfo, info)
+  console.log('渲染器信息:', rendererInfo)
 
   // 添加点击事件监听
   if (container.value) {
@@ -655,6 +677,21 @@ canvas {
 .status-badge.poor {
   background: rgba(239, 68, 68, 0.2);
   color: #ef4444;
+}
+
+/**
+ * 渲染器类型样式
+ */
+.renderer-webgpu {
+  background: rgba(59, 130, 246, 0.2);
+  color: #3b82f6;
+  font-weight: 600;
+}
+
+.renderer-webgl {
+  background: rgba(139, 92, 246, 0.2);
+  color: #8b5cf6;
+  font-weight: 600;
 }
 
 /**
