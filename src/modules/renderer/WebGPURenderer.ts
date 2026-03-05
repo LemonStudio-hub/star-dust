@@ -152,6 +152,11 @@ export class WebGPURenderer implements IRenderer {
         throw new Error('无法获取 WebGPU Canvas 上下文')
       }
 
+      // 设置 Canvas 尺寸
+      this.canvas.width = this.config.width
+      this.canvas.height = this.config.height
+      console.log(`Canvas 尺寸已设置为: ${this.canvas.width}x${this.canvas.height}`)
+
       // 配置 Canvas
       const presentationFormat = navigator.gpu.getPreferredCanvasFormat()
       
