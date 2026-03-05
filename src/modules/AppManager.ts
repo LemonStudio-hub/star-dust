@@ -202,20 +202,31 @@ export class AppManager {
       console.log(`渲染器类型: ${rendererInfo.type.toUpperCase()}`)
       console.log(`WebGPU 支持: ${rendererInfo.webgpuSupported ? '是' : '否'}`)
 
-      // 步骤 2：预计算噪声纹理
-      console.log('初始化噪声纹理...')
-      this.noiseTexture = new NoiseTexture()
+      // 根据渲染器类型初始化粒子系统
+      if (rendererInfo.type === 'webgpu') {
+        // WebGPU 渲染器内部已经管理了粒子系统，无需创建额外的 ParticleSystem
+        console.log('使用 WebGPU 粒子系统（内部管理）')
+        this.noiseTexture = null  // WebGPU 内部管理噪声纹理
+        this.particleSystem = null
+      } else {
+        // WebGL 渲染器需要创建传统的 ParticleSystem
+        console.log('使用 WebGL 粒子系统')
+        
+        // 步骤 2：预计算噪声纹理
+        console.log('初始化噪声纹理...')
+        this.noiseTexture = new NoiseTexture()
 
-      // 步骤 3：创建粒子系统
-      console.log('创建粒子系统...')
-      const particleConfig: ParticleConfig = {
-        count: config.particleCount,
-        size: config.particleSize,
-        boundsRadius: config.boundsRadius,
-        velocityScale: config.velocityScale,
-        maxSpeed: config.maxSpeed
+        // 步骤 3：创建粒子系统
+        console.log('创建粒子系统...')
+        const particleConfig: ParticleConfig = {
+          count: config.particleCount,
+          size: config.particleSize,
+          boundsRadius: config.boundsRadius,
+          velocityScale: config.velocityScale,
+          maxSpeed: config.maxSpeed
+        }
+        this.particleSystem = new ParticleSystem(this.renderer.scene, particleConfig, this.noiseTexture)
       }
-      this.particleSystem = new ParticleSystem(this.renderer.scene, particleConfig, this.noiseTexture)
 
       // 步骤 4：初始化交互系统
       console.log('初始化交互系统...')
@@ -384,20 +395,32 @@ export class AppManager {
       // 更新时间
       this.time += 16
 
-      // 更新粒子系统
-      this.particleSystem.update(this.time)
+      // 根据渲染器类型决定更新逻辑
+      if (this.particleSystem) {
+        // WebGL 粒子系统：需要手动更新
+        this.particleSystem.update(this.time)
 
-      // 平滑插值更新旋转角度
-      this.currentRotation.x += (this.targetRotation.x - this.currentRotation.x) * 0.05
-      this.currentRotation.y += (this.targetRotation.y - this.currentRotation.y) * 0.05
+        // 平滑插值更新旋转角度
+        this.currentRotation.x += (this.targetRotation.x - this.currentRotation.x) * 0.05
+        this.currentRotation.y += (this.targetRotation.y - this.currentRotation.y) * 0.05
 
-      // 应用旋转
-      this.particleSystem.points.rotation.x = this.currentRotation.x
-      this.particleSystem.points.rotation.y = this.currentRotation.y
-      this.particleSystem.points.rotation.y += 0.001  // 自动旋转
+        // 应用旋转
+        this.particleSystem.points.rotation.x = this.currentRotation.x
+        this.particleSystem.points.rotation.y = this.currentRotation.y
+        this.particleSystem.points.rotation.y += 0.001  // 自动旋转
+      } else {
+        // WebGPU 粒子系统：旋转由渲染器内部管理
+        // 平滑插值更新旋转角度
+        this.currentRotation.x += (this.targetRotation.x - this.currentRotation.x) * 0.05
+        this.currentRotation.y += (this.targetRotation.y - this.currentRotation.y) * 0.05
+
+        // 应用旋转到相机
+        this.renderer.camera.rotation.x = this.currentRotation.x
+        this.renderer.camera.rotation.y = this.currentRotation.y
+      }
 
       // 渲染场景
-      this.renderer.render()
+      this.renderer.render(this.renderer.scene, this.renderer.camera)
     } catch (error) {
       console.error('渲染循环中发生错误:', error)
       // 停止动画循环以防止错误持续发生
@@ -428,11 +451,17 @@ export class AppManager {
       this.touchInteraction.dispose()
       this.gestureHandler.dispose()
 
-      // 清理粒子系统
-      this.particleSystem.dispose(this.renderer.scene)
+      // 清理粒子系统（仅 WebGL）
+      if (this.particleSystem) {
+        this.particleSystem.dispose(this.renderer.scene)
+        this.particleSystem = null
+      }
 
-      // 清理噪声纹理
-      this.noiseTexture.dispose()
+      // 清理噪声纹理（仅 WebGL）
+      if (this.noiseTexture) {
+        this.noiseTexture.dispose()
+        this.noiseTexture = null
+      }
 
       // 清理渲染器
       this.renderer.dispose()
@@ -461,6 +490,20 @@ export class AppManager {
    */
   updateConfig(config: AppConfig): void {
     try {
+      const rendererType = this.renderer.getType()
+
+      if (rendererType === 'webgpu') {
+        // WebGPU 渲染器：不支持动态更新配置
+        console.warn('WebGPU 渲染器不支持动态更新配置，请刷新页面应用新配置')
+        return
+      }
+
+      // WebGL 渲染器：支持动态更新配置
+      if (!this.particleSystem) {
+        console.warn('粒子系统未初始化')
+        return
+      }
+
       // 更新粒子数量 - 需要重建粒子系统
       if (config.particleCount !== undefined && config.particleCount !== this.particleSystem.getConfig().count) {
         console.log('更新粒子数量:', config.particleCount)
