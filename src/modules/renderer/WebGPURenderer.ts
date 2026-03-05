@@ -278,7 +278,7 @@ export class WebGPURenderer implements IRenderer {
     this.particleBuffer = new GPUParticleBuffer(this.device, {
       count: this.particleCount,
       particles: particles,
-      doubleBuffer: true
+      doubleBuffer: false
     })
 
     // 创建计算着色器
