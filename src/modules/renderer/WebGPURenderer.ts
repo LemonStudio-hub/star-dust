@@ -13,6 +13,7 @@ import { GPUParticleBuffer } from '../particles/GPUParticleBuffer'
 import { ComputeShader } from '../particles/ComputeShader'
 import { RenderPipeline } from '../particles/RenderPipeline'
 import { GPUNoiseTexture } from '../noise/GPUNoiseTexture'
+import { NoiseTexture } from '../noise/NoiseTexture'
 
 /**
  * WebGPU 渲染器类
@@ -233,7 +234,6 @@ export class WebGPURenderer implements IRenderer {
     console.log('初始化 WebGPU 粒子系统...')
 
     // 创建 CPU 噪声纹理
-    const { NoiseTexture } = await import('../noise/NoiseTexture')
     console.log('创建 CPU 噪声纹理...')
     const cpuNoiseTexture = new NoiseTexture()
 

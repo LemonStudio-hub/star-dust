@@ -37,7 +37,7 @@ enum RendererType {
  */
 export class RendererAdapter implements IRenderer {
   /** 实际使用的渲染器实例 */
-  private renderer: IRenderer | null = null
+  private _renderer: IRenderer | null = null
   /** 渲染器类型 */
   private rendererType: RendererType = RendererType.WebGL
   /** 配置 */
@@ -148,8 +148,8 @@ export class RendererAdapter implements IRenderer {
    */
   private async initWebGPU(): Promise<void> {
     try {
-      this.renderer = new WebGPURenderer(this.config)
-      await this.renderer.init()
+      this._renderer = new WebGPURenderer(this.config)
+      await this._renderer.init()
       this.rendererType = RendererType.WebGPU
       console.log('✓ WebGPU 渲染器已初始化')
     } catch (error) {
@@ -165,7 +165,7 @@ export class RendererAdapter implements IRenderer {
    */
   private initWebGL(): void {
     try {
-      this.renderer = new Renderer(this.config)
+      this._renderer = new Renderer(this.config)
       this.rendererType = RendererType.WebGL
       console.log('✓ WebGL 渲染器已初始化')
     } catch (error) {
@@ -220,10 +220,10 @@ export class RendererAdapter implements IRenderer {
    * @returns 渲染器实例
    */
   get renderer(): IRenderer {
-    if (!this.renderer) {
+    if (!this._renderer) {
       throw new Error('渲染器未初始化')
     }
-    return this.renderer
+    return this._renderer
   }
 
   /**
@@ -232,10 +232,10 @@ export class RendererAdapter implements IRenderer {
    * @returns 场景实例
    */
   get scene(): THREE.Scene {
-    if (!this.renderer) {
+    if (!this._renderer) {
       throw new Error('渲染器未初始化')
     }
-    return this.renderer.scene
+    return this._renderer.scene
   }
 
   /**
@@ -244,10 +244,10 @@ export class RendererAdapter implements IRenderer {
    * @returns 相机实例
    */
   get camera(): THREE.Camera {
-    if (!this.renderer) {
+    if (!this._renderer) {
       throw new Error('渲染器未初始化')
     }
-    return this.renderer.camera
+    return this._renderer.camera
   }
 
   /**
@@ -257,22 +257,22 @@ export class RendererAdapter implements IRenderer {
    * @param camera - 相机
    */
   render(scene: THREE.Scene, camera: THREE.Camera): void {
-    if (!this.renderer) {
+    if (!this._renderer) {
       console.error('渲染器未初始化')
       return
     }
 
     try {
-      this.renderer.render(scene, camera)
+      this._renderer.render(scene, camera)
     } catch (error) {
       console.error('渲染失败:', error)
       // 如果是 WebGPU 渲染失败，尝试降级到 WebGL
       if (this.rendererType === RendererType.WebGPU) {
         console.warn('WebGPU 渲染失败，降级到 WebGL...')
-        this.renderer.dispose()
+        this._renderer.dispose()
         this.initWebGL()
         // 重新渲染
-        this.renderer.render(scene, camera)
+        this._renderer.render(scene, camera)
       }
     }
   }
@@ -284,12 +284,12 @@ export class RendererAdapter implements IRenderer {
    * @param height - 新的高度
    */
   resize(width: number, height: number): void {
-    if (!this.renderer) {
+    if (!this._renderer) {
       console.error('渲染器未初始化')
       return
     }
 
-    this.renderer.resize(width, height)
+    this._renderer.resize(width, height)
   }
 
   /**
@@ -304,9 +304,9 @@ export class RendererAdapter implements IRenderer {
     }
 
     try {
-      if (this.renderer) {
-        this.renderer.dispose()
-        this.renderer = null
+      if (this._renderer) {
+        this._renderer.dispose()
+        this._renderer = null
       }
       this.disposed = true
       console.log('✓ 渲染器适配器资源已释放')
@@ -330,7 +330,7 @@ export class RendererAdapter implements IRenderer {
    * @returns 是否已初始化
    */
   isInitialized(): boolean {
-    return this.renderer !== null && this.renderer.isInitialized()
+    return this._renderer !== null && this._renderer.isInitialized()
   }
 
   /**
