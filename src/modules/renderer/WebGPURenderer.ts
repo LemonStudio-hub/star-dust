@@ -9,6 +9,10 @@
 
 import * as THREE from 'three'
 import { IRenderer, RendererConfig } from './IRenderer'
+import { GPUParticleBuffer } from '../particles/GPUParticleBuffer'
+import { ComputeShader } from '../particles/ComputeShader'
+import { RenderPipeline } from '../particles/RenderPipeline'
+import { GPUNoiseTexture } from '../noise/GPUNoiseTexture'
 
 /**
  * WebGPU 渲染器类
@@ -41,6 +45,24 @@ export class WebGPURenderer implements IRenderer {
   private adapter: GPUAdapter | null = null
   /** 深度纹理 */
   private depthTexture: GPUTexture | null = null
+  /** 粒子缓冲区 */
+  private particleBuffer: GPUParticleBuffer | null = null
+  /** 计算着色器 */
+  private computeShader: ComputeShader | null = null
+  /** 渲染管线 */
+  private renderPipeline: RenderPipeline | null = null
+  /** 噪声纹理 */
+  private noiseTexture: GPUNoiseTexture | null = null
+  /** 粒子数量 */
+  private particleCount: number = 30000
+  /** 粒子大小 */
+  private particleSize: number = 1.2
+  /** 边界半径 */
+  private boundsRadius: number = 50
+  /** 速度缩放因子 */
+  private velocityScale: number = 0.08
+  /** 最大速度限制 */
+  private maxSpeed: number = 0.15
 
   /**
    * 构造函数，初始化 WebGPU 渲染器
@@ -150,6 +172,9 @@ export class WebGPURenderer implements IRenderer {
       // 添加光照
       this.setupLights()
 
+      // 初始化 WebGPU 粒子系统
+      await this.initParticleSystem()
+
       this.initialized = true
       console.log('✓ WebGPU 渲染器初始化完成')
     } catch (error) {
@@ -189,6 +214,59 @@ export class WebGPURenderer implements IRenderer {
   }
 
   /**
+   * 初始化 WebGPU 粒子系统
+   * 
+   * 创建粒子缓冲区、计算着色器、渲染管线和噪声纹理。
+   * 
+   * @private
+   */
+  private async initParticleSystem(): Promise<void> {
+    if (!this.device) {
+      throw new Error('WebGPU 设备未初始化')
+    }
+
+    console.log('初始化 WebGPU 粒子系统...')
+
+    // 创建 CPU 噪声纹理
+    const { NoiseTexture } = await import('../noise/NoiseTexture')
+    console.log('创建 CPU 噪声纹理...')
+    const cpuNoiseTexture = new NoiseTexture()
+
+    // 创建 GPU 噪声纹理
+    console.log('创建 GPU 噪声纹理...')
+    this.noiseTexture = new GPUNoiseTexture(this.device, cpuNoiseTexture)
+
+    // 创建粒子缓冲区
+    console.log('创建粒子缓冲区...')
+    this.particleBuffer = new GPUParticleBuffer(this.device, this.particleCount, this.boundsRadius)
+
+    // 创建计算着色器
+    console.log('创建计算着色器...')
+    this.computeShader = new ComputeShader(this.device, {
+      particleBuffer: this.particleBuffer,
+      velocityScale: this.velocityScale,
+      maxSpeed: this.maxSpeed,
+      boundsRadius: this.boundsRadius,
+      deltaTime: 0.016,
+      noiseTexture: {
+        textureView: this.noiseTexture.textureView,
+        sampler: this.noiseTexture.sampler
+      }
+    })
+
+    // 创建渲染管线
+    console.log('创建渲染管线...')
+    this.renderPipeline = new RenderPipeline({
+      device: this.device,
+      particleBuffer: this.particleBuffer,
+      particleSize: this.particleSize,
+      format: navigator.gpu.getPreferredCanvasFormat()
+    })
+
+    console.log('✓ WebGPU 粒子系统初始化完成')
+  }
+
+  /**
    * 渲染场景
    * 
    * @param scene - 要渲染的场景
@@ -200,8 +278,19 @@ export class WebGPURenderer implements IRenderer {
       return
     }
 
+    if (!this.computeShader || !this.renderPipeline || !this.particleBuffer) {
+      console.error('WebGPU 粒子系统未初始化')
+      return
+    }
+
+    // 更新相机参数
+    this.renderPipeline.updateCamera(camera as THREE.PerspectiveCamera)
+
     // 创建命令编码器
     const commandEncoder = this.device.createCommandEncoder()
+
+    // 执行计算着色器（更新粒子位置）
+    this.computeShader.dispatch(commandEncoder, performance.now() / 1000)
 
     // 创建渲染通道
     const textureView = this.context.getCurrentTexture().createView()
@@ -209,7 +298,7 @@ export class WebGPURenderer implements IRenderer {
       colorAttachments: [
         {
           view: textureView,
-          clearValue: { r: 0, g: 0, b: 0, a: 0 },
+          clearValue: { r: 0, g: 0, b: 0, a: 1 },
           loadOp: 'clear',
           storeOp: 'store'
         }
@@ -217,16 +306,11 @@ export class WebGPURenderer implements IRenderer {
       depthStencilAttachment: this.createDepthAttachment()
     }
 
-    // 注意：这里需要实现实际的渲染逻辑
-    // 当前只是基础框架，后续会添加计算着色器和渲染管线
-    
     const renderPass = commandEncoder.beginRenderPass(renderPassDescriptor)
-    
-    // 这里会设置渲染管线并绘制
-    // renderPass.setPipeline(renderPipeline)
-    // renderPass.setVertexBuffer(0, vertexBuffer)
-    // renderPass.draw(vertexCount)
-    
+
+    // 设置渲染管线并绘制粒子
+    this.renderPipeline.render(renderPass)
+
     renderPass.end()
 
     // 提交命令
@@ -294,6 +378,30 @@ export class WebGPURenderer implements IRenderer {
 
     console.log('正在释放 WebGPU 渲染器资源...')
 
+    // 清理计算着色器
+    if (this.computeShader) {
+      this.computeShader.dispose()
+      this.computeShader = null
+    }
+
+    // 清理渲染管线
+    if (this.renderPipeline) {
+      this.renderPipeline.dispose()
+      this.renderPipeline = null
+    }
+
+    // 清理粒子缓冲区
+    if (this.particleBuffer) {
+      this.particleBuffer.dispose()
+      this.particleBuffer = null
+    }
+
+    // 清理噪声纹理
+    if (this.noiseTexture) {
+      this.noiseTexture.dispose()
+      this.noiseTexture = null
+    }
+
     // 清理深度纹理
     if (this.depthTexture) {
       this.depthTexture.destroy()
@@ -302,7 +410,7 @@ export class WebGPURenderer implements IRenderer {
 
     // 注意：WebGPU 资源会在设备销毁时自动释放
     // 但我们应该手动清理所有创建的缓冲区、纹理等
-    
+
     this.device = null
     this.queue = null
     this.context = null
