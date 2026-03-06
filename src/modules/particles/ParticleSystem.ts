@@ -10,6 +10,7 @@
 import * as THREE from 'three'
 import { NoiseTexture, NoiseVector } from '../noise/NoiseTexture'
 import { ColorManager, ColorTheme } from '../colors/ColorManager'
+import { DefaultColorTheme } from '../colors/ColorTheme'
 
 /**
  * 粒子系统配置接口
@@ -168,7 +169,6 @@ export class ParticleSystem {
    * @private
    */
   private initializeDefaultColors(): void {
-    const { DefaultColorTheme } = require('../colors/ColorTheme')
     this.colorManager = new ColorManager(DefaultColorTheme, this.config.count)
     this.colorManager.initialize()
     this.updateColors()
