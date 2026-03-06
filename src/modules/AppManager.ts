@@ -16,7 +16,7 @@ import { ColorManager, ColorTheme } from './colors/ColorTheme'
 
 /**
  * 应用配置接口
- * 
+ *
  * @interface AppConfig
  */
 export interface AppConfig {
@@ -30,6 +30,8 @@ export interface AppConfig {
   velocityScale: number
   /** 最大速度 */
   maxSpeed: number
+  /** 是否启用粒子轨迹 */
+  enableTrail?: boolean
 }
 
 /**
@@ -210,7 +212,8 @@ export class AppManager {
         size: config.particleSize,
         boundsRadius: config.boundsRadius,
         velocityScale: config.velocityScale,
-        maxSpeed: config.maxSpeed
+        maxSpeed: config.maxSpeed,
+        enableTrail: config.enableTrail
       }
       this.particleSystem = new ParticleSystem(this.renderer.scene, particleConfig, this.noiseTexture)
 

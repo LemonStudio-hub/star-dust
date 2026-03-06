@@ -11,6 +11,7 @@ import * as THREE from 'three'
 import { NoiseTexture, NoiseVector } from '../noise/NoiseTexture'
 import { ColorManager, ColorTheme } from '../colors/ColorManager'
 import { DefaultColorTheme } from '../colors/ColorTheme'
+import { TrailManager, TrailConfig, DefaultTrailConfig } from './TrailManager'
 
 /**
  * 粒子系统配置接口
@@ -28,6 +29,10 @@ export interface ParticleConfig {
   velocityScale: number
   /** 最大速度限制 */
   maxSpeed: number
+  /** 是否启用粒子轨迹 */
+  enableTrail?: boolean
+  /** 轨迹配置（可选） */
+  trailConfig?: TrailConfig
 }
 
 /**
@@ -59,6 +64,8 @@ export class ParticleSystem {
   private noiseTexture: NoiseTexture
   /** 颜色管理器（可选） */
   private colorManager: ColorManager | null = null
+  /** 轨迹管理器（可选） */
+  private trailManager: TrailManager | null = null
   /** 标记是否已释放资源 */
   private disposed: boolean = false
 
@@ -92,6 +99,12 @@ export class ParticleSystem {
     this.noiseTexture = noiseTexture
     this.points = this.create(useDefaultColor)
     scene.add(this.points)
+
+    // 创建轨迹管理器（如果启用）
+    if (config.enableTrail) {
+      const trailConfig = config.trailConfig || DefaultTrailConfig
+      this.trailManager = new TrailManager(scene, config.count, trailConfig)
+    }
   }
 
   /**
@@ -256,14 +269,19 @@ export class ParticleSystem {
         }
   
         // 标记位置属性需要更新
-        this.points.geometry.attributes.position.needsUpdate = true
-  
-        // 更新颜色（如果有颜色管理器）
-        if (this.colorManager) {
-          this.colorManager.update(deltaTime)
-          this.updateColors()
-        }
-      } catch (error) {
+                this.points.geometry.attributes.position.needsUpdate = true
+        
+                // 更新颜色（如果有颜色管理器）
+                if (this.colorManager) {
+                  this.colorManager.update(deltaTime)
+                  this.updateColors()
+                }
+        
+                // 更新轨迹（如果有轨迹管理器）
+                if (this.trailManager && this.positions) {
+                  const colors = this.points.geometry.attributes.color.array as Float32Array
+                  this.trailManager.update(this.positions, colors)
+                }      } catch (error) {
         console.error('更新粒子系统时发生错误:', error)
       }
     }
@@ -381,6 +399,12 @@ export class ParticleSystem {
       if (this.colorManager) {
         this.colorManager.dispose()
         this.colorManager = null
+      }
+
+      // 释放轨迹管理器
+      if (this.trailManager) {
+        this.trailManager.dispose(scene)
+        this.trailManager = null
       }
 
       this.disposed = true
