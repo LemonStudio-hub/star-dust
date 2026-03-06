@@ -1,9 +1,9 @@
 /**
  * 应用管理器
- * 
+ *
  * 协调所有模块，管理应用的生命周期和主循环。
  * 这是应用的中心控制点，负责初始化、更新和清理。
- * 
+ *
  * @modules AppManager
  */
 
@@ -12,6 +12,7 @@ import { NoiseTexture } from './noise/NoiseTexture'
 import { ParticleSystem, ParticleConfig } from './particles/ParticleSystem'
 import { MouseInteraction, TouchInteraction, GestureHandler } from './interaction'
 import { Renderer, RendererConfig } from './renderer/Renderer'
+import { ColorManager, ColorTheme } from './colors/ColorTheme'
 
 /**
  * 应用配置接口
@@ -388,12 +389,67 @@ export class AppManager {
   }
 
   /**
+   * 设置颜色管理器
+   *
+   * 为粒子系统设置颜色管理器，用于动态颜色主题。
+   *
+   * @param manager - 颜色管理器
+   */
+  setColorManager(manager: ColorManager): void {
+    this.particleSystem.setColorManager(manager)
+  }
+
+  /**
+   * 获取颜色管理器
+   *
+   * @returns 当前颜色管理器，如果没有则返回 null
+   */
+  getColorManager(): ColorManager | null {
+    return this.particleSystem.getColorManager()
+  }
+
+  /**
+   * 切换颜色主题
+   *
+   * 快捷方法：直接切换颜色主题。
+   *
+   * @param theme - 新的颜色主题
+   */
+  setColorTheme(theme: ColorTheme): void {
+    this.particleSystem.setColorTheme(theme)
+  }
+
+  /**
+   * 设置颜色动画速度乘数
+   *
+   * @param multiplier - 速度乘数
+   */
+  setColorAnimationSpeedMultiplier(multiplier: number): void {
+    const colorManager = this.particleSystem.getColorManager()
+    if (colorManager) {
+      colorManager.setAnimationSpeedMultiplier(multiplier)
+    }
+  }
+
+  /**
+   * 启用/禁用颜色动画
+   *
+   * @param enabled - 是否启用动画
+   */
+  setColorAnimationEnabled(enabled: boolean): void {
+    const colorManager = this.particleSystem.getColorManager()
+    if (colorManager) {
+      colorManager.setAnimationEnabled(enabled)
+    }
+  }
+
+  /**
    * 主渲染循环
    *
    * 每帧执行以下操作：
    * 1. 计算真实帧时间
    * 2. 更新时间
-   * 3. 更新粒子系统
+   * 3. 更新粒子系统（传递 deltaTime 用于颜色动画）
    * 4. 更新旋转角度（平滑插值）
    * 5. 计算性能指标（如果设置了回调）
    * 6. 渲染场景
@@ -411,8 +467,8 @@ export class AppManager {
       // 更新时间（使用真实帧时间）
       this.time += deltaTime
 
-      // 更新粒子系统
-      this.particleSystem.update(this.time)
+      // 更新粒子系统（传递 deltaTime 用于颜色动画）
+      this.particleSystem.update(this.time, deltaTime)
 
       // 平滑插值更新旋转角度
       this.currentRotation.x += (this.targetRotation.x - this.currentRotation.x) * 0.05

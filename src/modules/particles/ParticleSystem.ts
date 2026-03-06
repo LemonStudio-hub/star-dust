@@ -9,21 +9,7 @@
 
 import * as THREE from 'three'
 import { NoiseTexture, NoiseVector } from '../noise/NoiseTexture'
-
-/**
- * 颜色调色板常量
- * 预定义的 8 种颜色调色板，用于粒子颜色分配
- */
-const COLOR_PALETTES = [
-  [1.0, 0.2, 0.5], // 粉色
-  [0.2, 0.8, 1.0], // 蓝色
-  [1.0, 0.9, 0.2], // 黄色
-  [0.3, 1.0, 0.5], // 绿色
-  [0.9, 0.2, 1.0], // 紫色
-  [1.0, 0.4, 0.1], // 橙色
-  [0.1, 0.9, 0.9], // 青色
-  [1.0, 1.0, 1.0], // 白色
-] as const
+import { ColorManager, ColorTheme } from '../colors/ColorManager'
 
 /**
  * 粒子系统配置接口
@@ -45,17 +31,18 @@ export interface ParticleConfig {
 
 /**
  * 粒子系统类
- * 
+ *
  * 负责管理所有粒子的创建、更新和渲染。
  * 粒子在 3D 空间中根据预计算的噪声场运动，
  * 当超出边界时会被重置到中心区域。
- * 
+ *
  * 主要功能：
  * - 初始化粒子位置和速度
  * - 根据噪声场更新粒子运动
  * - 处理边界条件
  * - 渲染彩色粒子
- * 
+ * - 支持动态颜色主题
+ *
  * @class ParticleSystem
  */
 export class ParticleSystem {
@@ -69,16 +56,19 @@ export class ParticleSystem {
   private config: ParticleConfig
   /** 噪声纹理引用 */
   private noiseTexture: NoiseTexture
+  /** 颜色管理器（可选） */
+  private colorManager: ColorManager | null = null
   /** 标记是否已释放资源 */
   private disposed: boolean = false
 
   /**
    * 构造函数，初始化粒子系统
-   * 
+   *
    * @param scene - Three.js 场景对象
    * @param config - 粒子配置参数
    * @param noiseTexture - 噪声纹理，用于粒子运动
-   * 
+   * @param useDefaultColor - 是否使用默认颜色（默认 true）
+   *
    * @example
    * ```typescript
    * const config = {
@@ -88,26 +78,32 @@ export class ParticleSystem {
    *   velocityScale: 0.08,
    *   maxSpeed: 0.15
    * };
-   * const particleSystem = new ParticleSystem(scene, config, noiseTexture);
+   * const particleSystem = new ParticleSystem(scene, config, noiseTexture, true);
    * ```
    */
-  constructor(scene: THREE.Scene, config: ParticleConfig, noiseTexture: NoiseTexture) {
+  constructor(
+    scene: THREE.Scene,
+    config: ParticleConfig,
+    noiseTexture: NoiseTexture,
+    useDefaultColor: boolean = true
+  ) {
     this.config = config
     this.noiseTexture = noiseTexture
-    this.points = this.create()
+    this.points = this.create(useDefaultColor)
     scene.add(this.points)
   }
 
   /**
    * 创建粒子系统
-   * 
+   *
    * 初始化粒子的位置、速度和颜色。
-   * 粒子在球体内随机分布，具有随机速度和颜色。
-   * 
+   * 粒子在球体内随机分布，具有随机速度。
+   *
+   * @param useDefaultColor - 是否使用默认颜色
    * @returns Three.js 点云对象
    * @private
    */
-  private create(): THREE.Points {
+  private create(useDefaultColor: boolean = true): THREE.Points {
     const geometry = new THREE.BufferGeometry()
     this.positions = new Float32Array(this.config.count * 3)
     this.velocities = new Float32Array(this.config.count * 3)
@@ -134,17 +130,20 @@ export class ParticleSystem {
       this.velocities[i3 + 1] = Math.sin(angle) * speed
       this.velocities[i3 + 2] = (Math.random() - 0.5) * speed
 
-      // 随机颜色
-      const palette = COLOR_PALETTES[Math.floor(Math.random() * COLOR_PALETTES.length)]
-      const brightness = 0.7 + Math.random() * 0.3
-      colors[i3] = palette[0] * brightness
-      colors[i3 + 1] = palette[1] * brightness
-      colors[i3 + 2] = palette[2] * brightness
+      // 初始化颜色（白色占位符，稍后由 ColorManager 替换）
+      colors[i3] = 1.0
+      colors[i3 + 1] = 1.0
+      colors[i3 + 2] = 1.0
     }
 
     // 设置几何体属性
     geometry.setAttribute('position', new THREE.BufferAttribute(this.positions, 3))
     geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3))
+
+    // 如果使用默认颜色，创建颜色管理器并初始化
+    if (useDefaultColor) {
+      this.initializeDefaultColors()
+    }
 
     // 创建材质
     const material = new THREE.PointsMaterial({
@@ -162,91 +161,194 @@ export class ParticleSystem {
   }
 
   /**
-   * 更新粒子系统
+   * 初始化默认颜色
    * 
-   * 根据噪声场更新所有粒子的位置和速度。
-   * 当粒子超出边界时，重置到中心区域。
+   * 使用默认颜色主题初始化粒子颜色。
    * 
-   * 更新逻辑：
-   * 1. 采样当前位置的噪声向量
-   * 2. 根据噪声向量更新速度
-   * 3. 限制最大速度
-   * 4. 更新位置
-   * 5. 检查边界条件
-   * 
-   * @param time - 当前时间，用于噪声采样
-   * 
-   * @example
-   * ```typescript
-   * particleSystem.update(currentTime);
-   * ```
+   * @private
    */
-  update(time: number): void {
-    if (this.disposed || !this.positions || !this.velocities) {
-      return
-    }
-
-    try {
-      const positions = this.points.geometry.attributes.position.array as Float32Array
-      const len = positions.length
-
-      // 更新每个粒子
-      for (let i = 0; i < len; i += 3) {
-        const x = positions[i]
-        const y = positions[i + 1]
-        const z = positions[i + 2]
-
-        // 从噪声纹理采样速度向量
-        const curl = this.noiseTexture.sample(x, y, z, time)
-
-        // 根据噪声向量更新速度
-        this.velocities[i] += curl.x * this.config.velocityScale
-        this.velocities[i + 1] += curl.y * this.config.velocityScale
-        this.velocities[i + 2] += curl.z * this.config.velocityScale
-
-        // 计算当前速度
-        const speed = Math.sqrt(
-          this.velocities[i] * this.velocities[i] +
-          this.velocities[i + 1] * this.velocities[i + 1] +
-          this.velocities[i + 2] * this.velocities[i + 2]
-        )
-
-        // 限制最大速度
-        if (speed > this.config.maxSpeed) {
-          const factor = this.config.maxSpeed / speed
-          this.velocities[i] *= factor
-          this.velocities[i + 1] *= factor
-          this.velocities[i + 2] *= factor
-        }
-
-        // 更新位置
-        positions[i] += this.velocities[i]
-        positions[i + 1] += this.velocities[i + 1]
-        positions[i + 2] += this.velocities[i + 2]
-
-        // 检查边界条件
-        const distSq = x * x + y * y + z * z
-        const boundsRadiusSq = this.config.boundsRadius * this.config.boundsRadius
-        if (distSq > boundsRadiusSq) {
-          // 重置到中心附近
-          positions[i] *= 0.1
-          positions[i + 1] *= 0.1
-          positions[i + 2] *= 0.1
-
-          // 重置速度
-          this.velocities[i] = (Math.random() - 0.5) * 0.05
-          this.velocities[i + 1] = (Math.random() - 0.5) * 0.05
-          this.velocities[i + 2] = (Math.random() - 0.5) * 0.05
-        }
-      }
-
-      // 标记位置属性需要更新
-    this.points.geometry.attributes.position.needsUpdate = true
-    } catch (error) {
-      console.error('更新粒子系统时发生错误:', error)
-    }
+  private initializeDefaultColors(): void {
+    const { DefaultColorTheme } = require('../colors/ColorTheme')
+    this.colorManager = new ColorManager(DefaultColorTheme, this.config.count)
+    this.colorManager.initialize()
+    this.updateColors()
   }
 
+  /**
+     * 更新粒子系统
+     *
+     * 根据噪声场更新所有粒子的位置和速度。
+     * 当粒子超出边界时，重置到中心区域。
+     *
+     * 更新逻辑：
+     * 1. 采样当前位置的噪声向量
+     * 2. 根据噪声向量更新速度
+     * 3. 限制最大速度
+     * 4. 更新位置
+     * 5. 检查边界条件
+     * 6. 更新颜色（如果有颜色管理器）
+     *
+     * @param time - 当前时间，用于噪声采样
+     * @param deltaTime - 时间增量（毫秒），用于颜色动画
+     *
+     * @example
+     * ```typescript
+     * particleSystem.update(currentTime, 16.67);
+     * ```
+     */
+    update(time: number, deltaTime: number = 16): void {
+      if (this.disposed || !this.positions || !this.velocities) {
+        return
+      }
+  
+      try {
+        const positions = this.points.geometry.attributes.position.array as Float32Array
+        const len = positions.length
+  
+        // 更新每个粒子
+        for (let i = 0; i < len; i += 3) {
+          const x = positions[i]
+          const y = positions[i + 1]
+          const z = positions[i + 2]
+  
+          // 从噪声纹理采样速度向量
+          const curl = this.noiseTexture.sample(x, y, z, time)
+  
+          // 根据噪声向量更新速度
+          this.velocities[i] += curl.x * this.config.velocityScale
+          this.velocities[i + 1] += curl.y * this.config.velocityScale
+          this.velocities[i + 2] += curl.z * this.config.velocityScale
+  
+          // 计算当前速度
+          const speed = Math.sqrt(
+            this.velocities[i] * this.velocities[i] +
+            this.velocities[i + 1] * this.velocities[i + 1] +
+            this.velocities[i + 2] * this.velocities[i + 2]
+          )
+  
+          // 限制最大速度
+          if (speed > this.config.maxSpeed) {
+            const factor = this.config.maxSpeed / speed
+            this.velocities[i] *= factor
+            this.velocities[i + 1] *= factor
+            this.velocities[i + 2] *= factor
+          }
+  
+          // 更新位置
+          positions[i] += this.velocities[i]
+          positions[i + 1] += this.velocities[i + 1]
+          positions[i + 2] += this.velocities[i + 2]
+  
+          // 检查边界条件
+          const distSq = x * x + y * y + z * z
+          const boundsRadiusSq = this.config.boundsRadius * this.config.boundsRadius
+          if (distSq > boundsRadiusSq) {
+            // 重置到中心附近
+            positions[i] *= 0.1
+            positions[i + 1] *= 0.1
+            positions[i + 2] *= 0.1
+  
+            // 重置速度
+            this.velocities[i] = (Math.random() - 0.5) * 0.05
+            this.velocities[i + 1] = (Math.random() - 0.5) * 0.05
+            this.velocities[i + 2] = (Math.random() - 0.5) * 0.05
+          }
+        }
+  
+        // 标记位置属性需要更新
+        this.points.geometry.attributes.position.needsUpdate = true
+  
+        // 更新颜色（如果有颜色管理器）
+        if (this.colorManager) {
+          this.colorManager.update(deltaTime)
+          this.updateColors()
+        }
+      } catch (error) {
+        console.error('更新粒子系统时发生错误:', error)
+      }
+    }
+  
+    /**
+     * 更新粒子颜色
+     * 
+     * 从颜色管理器获取颜色并应用到粒子系统。
+     * 
+     * @private
+     */
+    private updateColors(): void {
+      if (!this.colorManager) {
+        return
+      }
+  
+      try {
+        const colors = this.colorManager.getColors()
+        const colorAttribute = this.points.geometry.attributes.color
+        const array = colorAttribute.array as Float32Array
+  
+        // 批量更新颜色
+        for (let i = 0; i < array.length; i++) {
+          array[i] = colors[i]
+        }
+  
+        // 标记颜色属性需要更新
+        colorAttribute.needsUpdate = true
+      } catch (error) {
+        console.error('更新粒子颜色时发生错误:', error)
+      }
+    }
+  
+    /**
+     * 设置颜色管理器
+     * 
+     * 为粒子系统设置颜色管理器，用于动态颜色主题。
+     * 
+     * @param manager - 颜色管理器
+     * 
+     * @example
+     * ```typescript
+     * const colorManager = new ColorManager(newTheme, particleCount);
+     * particleSystem.setColorManager(colorManager);
+     * ```
+     */
+    setColorManager(manager: ColorManager): void {
+      if (this.colorManager) {
+        this.colorManager.dispose()
+      }
+  
+      this.colorManager = manager
+      this.colorManager.initialize()
+      this.updateColors()
+    }
+  
+    /**
+     * 获取颜色管理器
+     * 
+     * @returns 当前颜色管理器，如果没有则返回 null
+     */
+    getColorManager(): ColorManager | null {
+      return this.colorManager
+    }
+  
+    /**
+     * 切换颜色主题
+     * 
+     * 快捷方法：直接切换颜色主题。
+     * 
+     * @param theme - 新的颜色主题
+     * 
+     * @example
+     * ```typescript
+     * particleSystem.setColorTheme(newTheme);
+     * ```
+     */
+    setColorTheme(theme: ColorTheme): void {
+      if (!this.colorManager) {
+        this.colorManager = new ColorManager(theme, this.config.count)
+      } else {
+        this.colorManager.setTheme(theme)
+      }
+      this.updateColors()
+    }
   /**
    * 释放粒子系统资源
    *
@@ -273,6 +375,12 @@ export class ParticleSystem {
       if (this.velocities) {
         this.velocities.fill(0)
         this.velocities = null
+      }
+
+      // 释放颜色管理器
+      if (this.colorManager) {
+        this.colorManager.dispose()
+        this.colorManager = null
       }
 
       this.disposed = true
