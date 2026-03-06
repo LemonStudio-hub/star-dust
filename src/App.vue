@@ -186,14 +186,8 @@ const defaultConfig = { ...particleConfig }
 const perfMetrics = reactive({
   fps: 60,
   frameTime: 16.67,
-  lastFrameTime: 0,
-  frameCount: 0,
-  fpsUpdateInterval: 500, // 每 500ms 更新一次 FPS
-  lastFpsUpdate: 0,
   status: 'good',
-  statusText: '流畅',
-  running: true,
-  isFirstFrame: true
+  statusText: '流畅'
 })
 
 /**
@@ -267,7 +261,7 @@ const resetConfig = (): void => {
 
 /**
  * 组件挂载时的初始化
- * 
+ *
  * 创建并初始化应用管理器，启动 3D 粒子动画。
  */
 onMounted(() => {
@@ -295,76 +289,34 @@ onMounted(() => {
     container.value.addEventListener('touchend', handleClick)
   }
 
-  // 初始化性能监控
-  perfMetrics.lastFrameTime = performanceNow()
-  perfMetrics.lastFpsUpdate = performanceNow()
-  requestAnimationFrame(updatePerformance)
-})
-
-/**
- * 获取当前时间（兼容性处理）
- */
-const performanceNow = (): number => {
-  if (typeof window !== 'undefined' && window.performance && window.performance.now) {
-    return window.performance.now()
-  }
-  return Date.now()
-}
-
-/**
- * 更新性能监控
- */
-const updatePerformance = (): void => {
-  if (!perfMetrics.running) {
-    return
-  }
-
-  const now = performanceNow()
-  
-  // 跳过第一帧，避免显示异常的帧时间
-  if (perfMetrics.isFirstFrame) {
-    perfMetrics.lastFrameTime = now
-    perfMetrics.lastFpsUpdate = now
-    perfMetrics.isFirstFrame = false
-    requestAnimationFrame(updatePerformance)
-    return
-  }
-
-  const delta = now - perfMetrics.lastFrameTime
-  perfMetrics.lastFrameTime = now
-  perfMetrics.frameTime = delta
-  perfMetrics.frameCount++
-
-  // 定期更新 FPS 显示
-  if (now - perfMetrics.lastFpsUpdate >= perfMetrics.fpsUpdateInterval) {
-    perfMetrics.fps = Math.round((perfMetrics.frameCount * 1000) / (now - perfMetrics.lastFpsUpdate))
-    perfMetrics.frameCount = 0
-    perfMetrics.lastFpsUpdate = now
+  // 设置性能监控回调
+  appManager.setPerformanceCallback((fps, frameTime) => {
+    perfMetrics.fps = fps
+    perfMetrics.frameTime = frameTime
 
     // 更新状态
-    if (perfMetrics.fps >= 50) {
+    if (fps >= 50) {
       perfMetrics.status = 'good'
       perfMetrics.statusText = '流畅'
-    } else if (perfMetrics.fps >= 30) {
+    } else if (fps >= 30) {
       perfMetrics.status = 'medium'
       perfMetrics.statusText = '一般'
     } else {
       perfMetrics.status = 'poor'
       perfMetrics.statusText = '卡顿'
     }
-  }
-
-  requestAnimationFrame(updatePerformance)
-}
+  })
+})
 
 /**
  * 组件卸载时的清理
- * 
+ *
  * 释放应用管理器的所有资源，防止内存泄漏。
  */
 onUnmounted(() => {
   if (appManager) {
     console.log('Disposing application...')
+    appManager.removePerformanceCallback()
     appManager.dispose()
     appManager = null
   }
@@ -374,9 +326,6 @@ onUnmounted(() => {
     container.value.removeEventListener('click', handleClick)
     container.value.removeEventListener('touchend', handleClick)
   }
-
-  // 停止性能监控
-  perfMetrics.running = false
 })
 </script>
 

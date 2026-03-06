@@ -1,9 +1,9 @@
 /**
  * 交互系统模块
- * 
+ *
  * 处理用户的鼠标、触摸和手势交互。
  * 支持多种输入方式，实现流畅的视角控制。
- * 
+ *
  * @module interaction
  */
 
@@ -11,10 +11,36 @@ import * as THREE from 'three'
 import Hammer from 'hammerjs'
 
 /**
+ * 辅助函数：将客户端坐标归一化并转换为旋转角度
+ *
+ * @param clientX - 客户端 X 坐标
+ * @param clientY - 客户端 Y 坐标
+ * @param container - 容器元素
+ * @returns 归一化的旋转角度 {x, y}
+ */
+function normalizeToRotation(
+  clientX: number,
+  clientY: number,
+  container: HTMLElement
+): { x: number; y: number } {
+  const rect = container.getBoundingClientRect()
+
+  // 归一化到 [-1, 1] 范围
+  const normalizedX = ((clientX - rect.left) / rect.width) * 2 - 1
+  const normalizedY = -((clientY - rect.top) / rect.height) * 2 + 1
+
+  // 映射到旋转角度
+  return {
+    x: normalizedY * Math.PI * 0.5,
+    y: normalizedX * Math.PI * 0.5
+  }
+}
+
+/**
  * 鼠标交互处理器
- * 
+ *
  * 监听鼠标移动事件，将鼠标位置转换为旋转角度。
- * 
+ *
  * @class MouseInteraction
  */
 export class MouseInteraction {
@@ -57,27 +83,19 @@ export class MouseInteraction {
 
   /**
    * 处理鼠标移动事件
-   * 
+   *
    * 将鼠标在容器中的位置转换为归一化坐标 [-1, 1]，
    * 然后映射到旋转角度 [-π/2, π/2]。
    * 只有当鼠标在容器内时才会触发。
-   * 
+   *
    * @param event - 鼠标移动事件
    * @private
    */
   private handleMouseMove = (event: MouseEvent): void => {
-    const rect = this.container.getBoundingClientRect()
-    
-    // 归一化到 [-1, 1] 范围
-    const x = ((event.clientX - rect.left) / rect.width) * 2 - 1
-    const y = -((event.clientY - rect.top) / rect.height) * 2 + 1
-
-    // 映射到旋转角度
-    this.targetRotation.x = y * Math.PI * 0.5
-    this.targetRotation.y = x * Math.PI * 0.5
-
-    // 调用回调函数
-    this.callback(this.targetRotation.x, this.targetRotation.y)
+    const rotation = normalizeToRotation(event.clientX, event.clientY, this.container)
+    this.targetRotation.x = rotation.x
+    this.targetRotation.y = rotation.y
+    this.callback(rotation.x, rotation.y)
   }
 
   /**
@@ -137,11 +155,11 @@ export class TouchInteraction {
 
   /**
    * 处理触摸移动事件
-   * 
+   *
    * 将触摸点在容器中的位置转换为归一化坐标 [-1, 1]，
    * 然后映射到旋转角度 [-π/2, π/2]。
    * 只有当触摸在容器内时才会触发。
-   * 
+   *
    * @param event - 触摸移动事件
    * @private
    */
@@ -151,19 +169,11 @@ export class TouchInteraction {
       return
     }
 
-    const rect = this.container.getBoundingClientRect()
     const touch = event.touches[0]
-    
-    // 归一化到 [-1, 1] 范围
-    const x = ((touch.clientX - rect.left) / rect.width) * 2 - 1
-    const y = -((touch.clientY - rect.top) / rect.height) * 2 + 1
-
-    // 映射到旋转角度
-    this.targetRotation.x = y * Math.PI * 0.5
-    this.targetRotation.y = x * Math.PI * 0.5
-
-    // 调用回调函数
-    this.callback(this.targetRotation.x, this.targetRotation.y)
+    const rotation = normalizeToRotation(touch.clientX, touch.clientY, this.container)
+    this.targetRotation.x = rotation.x
+    this.targetRotation.y = rotation.y
+    this.callback(rotation.x, rotation.y)
   }
 
   /**
@@ -177,13 +187,13 @@ export class TouchInteraction {
 }
 
 /**
- * 手势处理器
- * 
- * 使用 Hammer.js 库处理复杂的手势操作，
- * 包括拖拽（pan）和缩放（pinch）手势。
- * 
- * @class GestureHandler
- */
+   * 手势处理器
+   *
+   * 使用 Hammer.js 库处理复杂的手势操作，
+   * 包括拖拽（pan）和缩放（pinch）手势。
+   *
+   * @class GestureHandler
+   */
 export class GestureHandler {
   /** Hammer.js 手势管理器 */
   private hammer: Hammer.Manager
@@ -196,11 +206,11 @@ export class GestureHandler {
 
   /**
    * 构造函数，初始化手势处理器
-   * 
+   *
    * @param element - 目标元素
    * @param onRotate - 旋转手势回调
    * @param onScale - 缩放手势回调
-   * 
+   *
    * @example
    * ```typescript
    * const gestureHandler = new GestureHandler(
@@ -224,9 +234,9 @@ export class GestureHandler {
 
   /**
    * 设置手势识别器
-   * 
+   *
    * 配置 pan（拖拽）和 pinch（缩放）手势。
-   * 
+   *
    * @private
    */
   private setup(): void {
@@ -264,7 +274,6 @@ export class GestureHandler {
       lastScale = 1
     })
   }
-
   /**
    * 释放资源
    * 

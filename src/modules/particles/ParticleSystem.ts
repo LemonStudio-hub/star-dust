@@ -1,9 +1,9 @@
 /**
  * 粒子系统模块
- * 
+ *
  * 管理粒子的创建、更新和渲染。
  * 粒子在 3D 空间中根据噪声场运动，产生有机的流动效果。
- * 
+ *
  * @module particles/ParticleSystem
  */
 
@@ -11,8 +11,23 @@ import * as THREE from 'three'
 import { NoiseTexture, NoiseVector } from '../noise/NoiseTexture'
 
 /**
+ * 颜色调色板常量
+ * 预定义的 8 种颜色调色板，用于粒子颜色分配
+ */
+const COLOR_PALETTES = [
+  [1.0, 0.2, 0.5], // 粉色
+  [0.2, 0.8, 1.0], // 蓝色
+  [1.0, 0.9, 0.2], // 黄色
+  [0.3, 1.0, 0.5], // 绿色
+  [0.9, 0.2, 1.0], // 紫色
+  [1.0, 0.4, 0.1], // 橙色
+  [0.1, 0.9, 0.9], // 青色
+  [1.0, 1.0, 1.0], // 白色
+] as const
+
+/**
  * 粒子系统配置接口
- * 
+ *
  * @interface ParticleConfig
  */
 export interface ParticleConfig {
@@ -98,18 +113,6 @@ export class ParticleSystem {
     this.velocities = new Float32Array(this.config.count * 3)
     const colors = new Float32Array(this.config.count * 3)
 
-    // 预定义的颜色调色板
-    const colorPalettes = [
-      [1.0, 0.2, 0.5], // 粉色
-      [0.2, 0.8, 1.0], // 蓝色
-      [1.0, 0.9, 0.2], // 黄色
-      [0.3, 1.0, 0.5], // 绿色
-      [0.9, 0.2, 1.0], // 紫色
-      [1.0, 0.4, 0.1], // 橙色
-      [0.1, 0.9, 0.9], // 青色
-      [1.0, 1.0, 1.0], // 白色
-    ]
-
     // 初始化每个粒子
     for (let i = 0; i < this.config.count; i++) {
       const i3 = i * 3
@@ -132,7 +135,7 @@ export class ParticleSystem {
       this.velocities[i3 + 2] = (Math.random() - 0.5) * speed
 
       // 随机颜色
-      const palette = colorPalettes[Math.floor(Math.random() * colorPalettes.length)]
+      const palette = COLOR_PALETTES[Math.floor(Math.random() * COLOR_PALETTES.length)]
       const brightness = 0.7 + Math.random() * 0.3
       colors[i3] = palette[0] * brightness
       colors[i3 + 1] = palette[1] * brightness
@@ -234,10 +237,10 @@ export class ParticleSystem {
           this.velocities[i] = (Math.random() - 0.5) * 0.05
           this.velocities[i + 1] = (Math.random() - 0.5) * 0.05
           this.velocities[i + 2] = (Math.random() - 0.5) * 0.05
+        }
       }
-    }
 
-    // 标记位置属性需要更新
+      // 标记位置属性需要更新
     this.points.geometry.attributes.position.needsUpdate = true
     } catch (error) {
       console.error('更新粒子系统时发生错误:', error)
@@ -246,22 +249,32 @@ export class ParticleSystem {
 
   /**
    * 释放粒子系统资源
-   * 
+   *
    * 从场景中移除粒子系统，并释放几何体和材质资源。
-   * 
+   * 显式释放数组的内存，防止内存泄漏。
+   *
    * @param scene - Three.js 场景对象
    */
   dispose(scene: THREE.Scene): void {
     if (this.disposed) {
       return
     }
-    
+
     try {
       scene.remove(this.points)
       this.points.geometry.dispose()
       this.points.material.dispose()
-      this.positions = null
-      this.velocities = null
+
+      // 显式释放内存
+      if (this.positions) {
+        this.positions.fill(0)
+        this.positions = null
+      }
+      if (this.velocities) {
+        this.velocities.fill(0)
+        this.velocities = null
+      }
+
       this.disposed = true
     } catch (error) {
       console.error('释放粒子系统资源失败:', error)

@@ -91,6 +91,13 @@ export class AppManager {
   private currentRotation: THREE.Vector2
   /** 时间参数 */
   private time: number
+  /** 上一帧的时间戳 */
+  private lastFrameTime: number = 0
+  /** 性能回调函数 */
+  private perfCallback?: (fps: number, frameTime: number) => void
+  /** 性能监控状态 */
+  private lastPerfUpdate: number = 0
+  private perfFrameCount: number = 0
   /** 动画帧 ID */
   private animationFrameId: number
   /** 保存的配置（用于上下文恢复） */
@@ -212,7 +219,8 @@ export class AppManager {
 
       // 步骤 5：启动主循环
       console.log('启动应用...')
-      this.animate()
+      this.lastFrameTime = performance.now()
+      this.animate(this.lastFrameTime)
     } catch (error) {
       console.error('应用初始化过程中发生错误:', error)
       // 尝试清理已初始化的资源
@@ -253,7 +261,11 @@ export class AppManager {
         this.targetRotation.y = y
       },
       (scale) => {
-        this.particleSystem.points.scale.multiplyScalar(scale)
+        // 限制缩放范围在 [0.1, 10] 之间，防止指数增长
+        const currentScale = this.particleSystem.points.scale.x
+        const newScale = currentScale * scale
+        const clampedScale = Math.max(0.1, Math.min(10, newScale))
+        this.particleSystem.points.scale.set(clampedScale, clampedScale, clampedScale)
       }
     )
 
@@ -346,7 +358,7 @@ export class AppManager {
 
   /**
    * 处理窗口大小调整
-   * 
+   *
    * @private
    */
   private handleResize = (): void => {
@@ -356,22 +368,48 @@ export class AppManager {
   }
 
   /**
+   * 设置性能回调函数
+   *
+   * 每帧渲染时会调用此回调，传入 FPS 和帧时间数据。
+   *
+   * @param callback - 性能回调函数，接收 fps 和 frameTime 参数
+   */
+  setPerformanceCallback(callback: (fps: number, frameTime: number) => void): void {
+    this.perfCallback = callback
+    this.lastPerfUpdate = performance.now()
+    this.perfFrameCount = 0
+  }
+
+  /**
+   * 移除性能回调函数
+   */
+  removePerformanceCallback(): void {
+    this.perfCallback = undefined
+  }
+
+  /**
    * 主渲染循环
-   * 
+   *
    * 每帧执行以下操作：
-   * 1. 更新时间
-   * 2. 更新粒子系统
-   * 3. 更新旋转角度（平滑插值）
-   * 4. 渲染场景
-   * 
+   * 1. 计算真实帧时间
+   * 2. 更新时间
+   * 3. 更新粒子系统
+   * 4. 更新旋转角度（平滑插值）
+   * 5. 计算性能指标（如果设置了回调）
+   * 6. 渲染场景
+   *
    * @private
    */
-  private animate = (): void => {
+  private animate = (timestamp: number): void => {
     this.animationFrameId = requestAnimationFrame(this.animate)
 
     try {
-      // 更新时间
-      this.time += 16
+      // 计算真实帧时间
+      const deltaTime = this.lastFrameTime === 0 ? 16 : timestamp - this.lastFrameTime
+      this.lastFrameTime = timestamp
+
+      // 更新时间（使用真实帧时间）
+      this.time += deltaTime
 
       // 更新粒子系统
       this.particleSystem.update(this.time)
@@ -384,6 +422,19 @@ export class AppManager {
       this.particleSystem.points.rotation.x = this.currentRotation.x
       this.particleSystem.points.rotation.y = this.currentRotation.y
       this.particleSystem.points.rotation.y += 0.001  // 自动旋转
+
+      // 计算性能指标（如果设置了回调）
+      if (this.perfCallback) {
+        this.perfFrameCount++
+        const perfUpdateInterval = 500 // 每 500ms 更新一次
+
+        if (timestamp - this.lastPerfUpdate >= perfUpdateInterval) {
+          const fps = Math.round((this.perfFrameCount * 1000) / (timestamp - this.lastPerfUpdate))
+          this.perfCallback(fps, deltaTime)
+          this.perfFrameCount = 0
+          this.lastPerfUpdate = timestamp
+        }
+      }
 
       // 渲染场景
       this.renderer.render()
