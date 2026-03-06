@@ -64,8 +64,17 @@ import { ref, computed } from 'vue'
 import { PRESET_THEMES, getPresetTheme } from '../modules/colors/presets'
 import type { ColorTheme } from '../modules/colors/ColorTheme'
 
+/**
+ * AppManager 接口定义
+ */
+interface AppManager {
+  setColorTheme(theme: ColorTheme): void
+  setColorAnimationSpeedMultiplier(multiplier: number): void
+  setColorAnimationEnabled(enabled: boolean): void
+}
+
 interface Props {
-  appManager: any
+  appManager: AppManager
 }
 
 const props = defineProps<Props>()

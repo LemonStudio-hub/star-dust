@@ -99,6 +99,8 @@ export class AppManager {
   /** 性能监控状态 */
   private lastPerfUpdate: number = 0
   private perfFrameCount: number = 0
+  /** 性能更新间隔（毫秒） */
+  private perfUpdateInterval: number = 500
   /** 动画帧 ID */
   private animationFrameId: number
   /** 保存的配置（用于上下文恢复） */
@@ -389,6 +391,15 @@ export class AppManager {
   }
 
   /**
+   * 设置性能更新间隔
+   *
+   * @param interval - 更新间隔（毫秒）
+   */
+  setPerformanceUpdateInterval(interval: number): void {
+    this.perfUpdateInterval = Math.max(100, interval) // 最小 100ms
+  }
+
+  /**
    * 设置颜色管理器
    *
    * 为粒子系统设置颜色管理器，用于动态颜色主题。
@@ -482,9 +493,8 @@ export class AppManager {
       // 计算性能指标（如果设置了回调）
       if (this.perfCallback) {
         this.perfFrameCount++
-        const perfUpdateInterval = 500 // 每 500ms 更新一次
 
-        if (timestamp - this.lastPerfUpdate >= perfUpdateInterval) {
+        if (timestamp - this.lastPerfUpdate >= this.perfUpdateInterval) {
           const fps = Math.round((this.perfFrameCount * 1000) / (timestamp - this.lastPerfUpdate))
           this.perfCallback(fps, deltaTime)
           this.perfFrameCount = 0
@@ -514,24 +524,40 @@ export class AppManager {
   dispose(): void {
     try {
       // 停止动画循环
-      cancelAnimationFrame(this.animationFrameId)
+      if (this.animationFrameId !== undefined) {
+        cancelAnimationFrame(this.animationFrameId)
+      }
 
       // 移除事件监听器
-      window.removeEventListener('resize', this.handleResize)
+      if (this.handleResize) {
+        window.removeEventListener('resize', this.handleResize)
+      }
 
-      // 清理交互系统
-      this.mouseInteraction.dispose()
-      this.touchInteraction.dispose()
-      this.gestureHandler.dispose()
+      // 清理交互系统（添加空值检查）
+      if (this.mouseInteraction) {
+        this.mouseInteraction.dispose()
+      }
+      if (this.touchInteraction) {
+        this.touchInteraction.dispose()
+      }
+      if (this.gestureHandler) {
+        this.gestureHandler.dispose()
+      }
 
       // 清理粒子系统
-      this.particleSystem.dispose(this.renderer.scene)
+      if (this.particleSystem && this.renderer) {
+        this.particleSystem.dispose(this.renderer.scene)
+      }
 
       // 清理噪声纹理
-      this.noiseTexture.dispose()
+      if (this.noiseTexture) {
+        this.noiseTexture.dispose()
+      }
 
       // 清理渲染器
-      this.renderer.dispose()
+      if (this.renderer) {
+        this.renderer.dispose()
+      }
     } catch (error) {
       console.error('释放应用资源时发生错误:', error)
     }
