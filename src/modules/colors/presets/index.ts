@@ -12,6 +12,8 @@ import { NatureTheme } from './Nature'
 import { CoolToneTheme } from './CoolTone'
 import { WarmToneTheme } from './WarmTone'
 import { RainbowTheme } from './Rainbow'
+import { SpeedFlowTheme } from './SpeedFlow'
+import { RadialGlowTheme } from './RadialGlow'
 
 /**
  * 所有预设颜色主题列表
