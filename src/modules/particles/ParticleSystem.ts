@@ -278,10 +278,14 @@ export class ParticleSystem {
                 }
         
                 // 更新轨迹（如果有轨迹管理器）
-                if (this.trailManager && this.positions) {
-                  const colors = this.points.geometry.attributes.color.array as Float32Array
-                  this.trailManager.update(this.positions, colors)
-                }      } catch (error) {
+        
+                        if (this.trailManager && this.positions && this.velocities) {
+        
+                          const colors = this.points.geometry.attributes.color.array as Float32Array
+        
+                          this.trailManager.update(this.positions, colors, this.velocities, this.config.maxSpeed)
+        
+                        }      } catch (error) {
         console.error('更新粒子系统时发生错误:', error)
       }
     }

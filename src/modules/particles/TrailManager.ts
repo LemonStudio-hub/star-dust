@@ -1,13 +1,13 @@
 /**
- * 粒子轨迹管理器
+ * 优雅的粒子轨迹管理器
  *
- * 为粒子系统创建优雅的轨迹效果。
- * 轨迹会跟随粒子运动，产生流动的视觉体验。
+ * 创建真实、动态、优雅的粒子轨迹效果。
  *
  * 设计理念：
- * - 简单：使用历史位置存储和 LineSegments 绘制
- * - 优雅：透明度渐变和颜色一致性
- * - 高效：只为部分粒子绘制轨迹，性能可控
+ * - 真实路径：轨迹是粒子实际走过的路径
+ * - 动态长度：根据粒子速度动态调整轨迹长度
+ * - 半透明渐变：从头部到尾部透明度逐渐降低
+ * - 逐渐消失：轨迹会随着时间逐渐消失
  *
  * @module particles/TrailManager
  */
@@ -20,27 +20,48 @@ import * as THREE from 'three'
  * @interface TrailConfig
  */
 export interface TrailConfig {
-  /** 轨迹长度（历史位置数量） */
-  length: number
-  /** 轨迹透明度 */
-  opacity: number
   /** 轨迹粒子比例（0-1，表示有多少百分比的粒子显示轨迹） */
   particleRatio: number
-  /** 轨迹宽度 */
-  width: number
-  /** 轨迹颜色衰减因子（0-1，越小衰减越快） */
-  colorDecay: number
+  /** 最大轨迹长度（顶点数量） */
+  maxLength: number
+  /** 最小轨迹长度（顶点数量） */
+  minLength: number
+  /** 基础透明度 */
+  baseOpacity: number
+  /** 消失速度（每帧减少的透明度） */
+  fadeSpeed: number
+  /** 最小显示透明度（低于此值的轨迹不显示） */
+  minVisibleOpacity: number
 }
 
 /**
  * 默认轨迹配置
  */
 export const DefaultTrailConfig: TrailConfig = {
-  length: 6,           // 每个粒子存储 6 个历史位置
-  opacity: 0.3,        // 轨迹透明度 30%
-  particleRatio: 0.25, // 25% 的粒子显示轨迹（约 7500 条）
-  width: 0.8,          // 轨迹宽度
-  colorDecay: 0.85     // 颜色衰减因子
+  particleRatio: 0.2,    // 20% 的粒子显示轨迹（约 6000 条）
+  maxLength: 15,         // 最大 15 个顶点
+  minLength: 5,          // 最小 5 个顶点
+  baseOpacity: 0.6,      // 基础透明度 60%
+  fadeSpeed: 0.008,      // 每帧减少 0.8% 的透明度
+  minVisibleOpacity: 0.05 // 最小可见透明度 5%
+}
+
+/**
+ * 粒子轨迹数据
+ *
+ * @interface ParticleTrail
+ */
+interface ParticleTrail {
+  /** 历史位置数组 [x, y, z, x, y, z, ...] */
+  history: Float32Array
+  /** 当前历史索引（环形缓冲区） */
+  index: number
+  /** 当前轨迹长度 */
+  length: number
+  /** 轨迹透明度 */
+  opacity: number
+  /** 是否活跃 */
+  active: boolean
 }
 
 /**
@@ -53,20 +74,18 @@ export const DefaultTrailConfig: TrailConfig = {
 export class TrailManager {
   /** 轨迹线段对象 */
   public trailLines: THREE.LineSegments
-  /** 历史位置数组 [particleCount * historyLength * 3] */
-  private historyPositions: Float32Array
-  /** 历史位置索引数组 [particleCount] */
-  private historyIndices: Uint8Array
-  /** 轨迹顶点位置数组 */
-  private trailPositions: Float32Array
-  /** 轨迹颜色数组 */
-  private trailColors: Float32Array
+  /** 粒子轨迹数据数组 */
+  private particleTrails: ParticleTrail[]
   /** 轨迹配置 */
   private config: TrailConfig
   /** 粒子总数 */
   private particleCount: number
   /** 轨迹粒子数量 */
   private trailParticleCount: number
+  /** 轨迹顶点位置数组 */
+  private trailPositions: Float32Array
+  /** 轨迹颜色数组 */
+  private trailColors: Float32Array
   /** 标记是否已释放资源 */
   private disposed: boolean = false
 
@@ -76,11 +95,6 @@ export class TrailManager {
    * @param scene - Three.js 场景对象
    * @param particleCount - 粒子总数
    * @param config - 轨迹配置
-   *
-   * @example
-   * ```typescript
-   * const trailManager = new TrailManager(scene, 30000, DefaultTrailConfig);
-   * ```
    */
   constructor(
     scene: THREE.Scene,
@@ -91,15 +105,25 @@ export class TrailManager {
     this.config = { ...config }
     this.trailParticleCount = Math.floor(particleCount * config.particleRatio)
 
-    // 初始化历史位置数组
-    this.historyPositions = new Float32Array(this.trailParticleCount * config.length * 3)
-    this.historyIndices = new Uint8Array(this.trailParticleCount)
+    // 初始化粒子轨迹数据
+    this.particleTrails = []
+    for (let i = 0; i < this.trailParticleCount; i++) {
+      this.particleTrails.push({
+        history: new Float32Array(config.maxLength * 3),
+        index: 0,
+        length: 0,
+        opacity: config.baseOpacity,
+        active: false
+      })
+    }
+
+    // 计算最大线段数量
+    const maxSegmentsPerTrail = config.maxLength - 1
+    const maxSegments = this.trailParticleCount * maxSegmentsPerTrail
 
     // 初始化轨迹顶点数组（每段 2 个顶点）
-    const segmentsPerParticle = config.length - 1
-    const segmentCount = this.trailParticleCount * segmentsPerParticle
-    this.trailPositions = new Float32Array(segmentCount * 2 * 3)
-    this.trailColors = new Float32Array(segmentCount * 2 * 3)
+    this.trailPositions = new Float32Array(maxSegments * 2 * 3)
+    this.trailColors = new Float32Array(maxSegments * 2 * 3)
 
     // 创建轨迹几何体
     const geometry = new THREE.BufferGeometry()
@@ -110,19 +134,19 @@ export class TrailManager {
     const material = new THREE.LineBasicMaterial({
       vertexColors: true,
       transparent: true,
-      opacity: config.opacity,
+      opacity: 1.0,
       blending: THREE.AdditiveBlending,
       depthWrite: false
     })
 
     // 创建轨迹线段对象
     this.trailLines = new THREE.LineSegments(geometry, material)
-    this.trailLines.frustumCulled = false  // 禁用视锥体剔除，确保轨迹始终渲染
+    this.trailLines.frustumCulled = false
 
     // 添加到场景
     scene.add(this.trailLines)
 
-    console.log(`TrailManager initialized: ${this.trailParticleCount} trails, ${segmentCount} segments`)
+    console.log(`TrailManager initialized: ${this.trailParticleCount} trails, max ${maxSegments} segments`)
   }
 
   /**
@@ -132,50 +156,106 @@ export class TrailManager {
    *
    * @param currentPositions - 当前粒子位置数组
    * @param currentColors - 当前粒子颜色数组
+   * @param velocities - 当前粒子速度数组
+   * @param maxSpeed - 最大速度（用于计算动态轨迹长度）
    */
-  update(currentPositions: Float32Array, currentColors: Float32Array): void {
+  update(
+    currentPositions: Float32Array,
+    currentColors: Float32Array,
+    velocities: Float32Array,
+    maxSpeed: number
+  ): void {
     if (this.disposed) {
       return
     }
 
     try {
-      const { length, colorDecay } = this.config
-      const historyPositions = this.historyPositions
-      const historyIndices = this.historyIndices
+      const { maxLength, minLength, fadeSpeed, baseOpacity, minVisibleOpacity } = this.config
       const trailPositions = this.trailPositions
       const trailColors = this.trailColors
 
-      // 更新每个轨迹粒子的历史位置
+      let vertexOffset = 0
+
+      // 更新每个轨迹粒子
       for (let i = 0; i < this.trailParticleCount; i++) {
         // 获取粒子索引（均匀分布在所有粒子中）
         const particleIndex = Math.floor((i / this.trailParticleCount) * this.particleCount)
         const i3 = particleIndex * 3
 
-        // 获取当前历史索引
-        const historyIndex = historyIndices[i]
+        const trail = this.particleTrails[i]
+        const history = trail.history
 
-        // 存储当前历史位置
-        const historyOffset = (i * length + historyIndex) * 3
-        historyPositions[historyOffset] = currentPositions[i3]
-        historyPositions[historyOffset + 1] = currentPositions[i3 + 1]
-        historyPositions[historyOffset + 2] = currentPositions[i3 + 2]
+        // 添加当前位置到历史记录
+        history[trail.index * 3] = currentPositions[i3]
+        history[trail.index * 3 + 1] = currentPositions[i3 + 1]
+        history[trail.index * 3 + 2] = currentPositions[i3 + 2]
 
-        // 更新历史索引（环形缓冲区）
-        historyIndices[i] = (historyIndex + 1) % length
+        // 更新索引（环形缓冲区）
+        trail.index = (trail.index + 1) % maxLength
 
-        // 构建轨迹线段
-        this.buildTrailSegments(
-          i,
-          currentColors[i3],
-          currentColors[i3 + 1],
-          currentColors[i3 + 2],
-          historyPositions,
-          trailPositions,
-          trailColors,
-          historyIndex,
-          length,
-          colorDecay
+        // 计算当前轨迹长度（动态：根据速度）
+        const speed = Math.sqrt(
+          velocities[i3] * velocities[i3] +
+          velocities[i3 + 1] * velocities[i3 + 1] +
+          velocities[i3 + 2] * velocities[i3 + 2]
         )
+
+        // 速度越快，轨迹越长
+        const speedRatio = speed / maxSpeed
+        const dynamicLength = Math.floor(
+          minLength + (maxLength - minLength) * speedRatio
+        )
+
+        // 更新轨迹长度
+        trail.length = Math.min(trail.length + 1, dynamicLength)
+
+        // 更新透明度（逐渐消失）
+        if (trail.active) {
+          trail.opacity -= fadeSpeed
+        }
+
+        // 检查是否应该激活或停用轨迹
+        if (!trail.active && speed > maxSpeed * 0.3) {
+          // 速度足够快时激活轨迹
+          trail.active = true
+          trail.opacity = baseOpacity
+        } else if (trail.opacity < minVisibleOpacity) {
+          // 透明度太低时停用轨迹
+          trail.active = false
+          trail.length = 0
+        }
+
+        // 渲染轨迹
+        if (trail.active && trail.length >= 2) {
+          this.renderTrail(
+            trail,
+            currentColors[i3],
+            currentColors[i3 + 1],
+            currentColors[i3 + 2],
+            trailPositions,
+            trailColors,
+            vertexOffset
+          )
+
+          vertexOffset += (trail.length - 1) * 6
+        }
+      }
+
+      // 清理未使用的顶点
+      while (vertexOffset < trailPositions.length) {
+        trailPositions[vertexOffset] = 0
+        trailPositions[vertexOffset + 1] = 0
+        trailPositions[vertexOffset + 2] = 0
+        trailPositions[vertexOffset + 3] = 0
+        trailPositions[vertexOffset + 4] = 0
+        trailPositions[vertexOffset + 5] = 0
+        trailColors[vertexOffset] = 0
+        trailColors[vertexOffset + 1] = 0
+        trailColors[vertexOffset + 2] = 0
+        trailColors[vertexOffset + 3] = 0
+        trailColors[vertexOffset + 4] = 0
+        trailColors[vertexOffset + 5] = 0
+        vertexOffset += 6
       }
 
       // 标记属性需要更新
@@ -187,96 +267,94 @@ export class TrailManager {
   }
 
   /**
-   * 构建轨迹线段
+   * 渲染轨迹
    *
-   * 根据历史位置构建轨迹线段，并应用颜色衰减。
+   * 根据历史位置构建轨迹线段，并应用透明度渐变。
    *
    * @private
    */
-  private buildTrailSegments(
-    particleIndex: number,
+  private renderTrail(
+    trail: ParticleTrail,
     r: number,
     g: number,
     b: number,
-    historyPositions: Float32Array,
-    trailPositions: Float32Array,
-    trailColors: Float32Array,
-    currentHistoryIndex: number,
-    length: number,
-    colorDecay: number
+    positions: Float32Array,
+    colors: Float32Array,
+    offset: number
   ): void {
-    const segmentsPerParticle = length - 1
-    let segmentOffset = particleIndex * segmentsPerParticle * 6  // 每段 2 个顶点，每个顶点 3 个坐标
+    const { maxLength, baseOpacity } = this.config
+    const history = trail.history
+    const length = trail.length
+    const index = trail.index
 
-    // 构建从旧到新的线段
-    for (let s = 0; s < segmentsPerParticle; s++) {
-      // 计算历史索引（从最老到最新）
-      const age = (segmentsPerParticle - s) / segmentsPerParticle  // 0 (最新) 到 1 (最老)
-      const historyIndex = (currentHistoryIndex - s + length) % length
+    // 从最老的位置开始
+    const startIndex = (index - length + maxLength) % maxLength
 
-      // 获取历史位置
-      const historyOffset = (particleIndex * length + historyIndex) * 3
-      const x = historyPositions[historyOffset]
-      const y = historyPositions[historyOffset + 1]
-      const z = historyPositions[historyOffset + 2]
+    for (let i = 0; i < length - 1; i++) {
+      // 当前段的位置索引
+      const currentIdx = (startIndex + i) % maxLength
+      const nextIdx = (startIndex + i + 1) % maxLength
 
-      // 获取下一个历史位置
-      const nextHistoryIndex = (currentHistoryIndex - s - 1 + length) % length
-      const nextHistoryOffset = (particleIndex * length + nextHistoryIndex) * 3
-      const nextX = historyPositions[nextHistoryOffset]
-      const nextY = historyPositions[nextHistoryOffset + 1]
-      const nextZ = historyPositions[nextHistoryOffset + 2]
+      // 获取当前位置和下一个位置
+      const currentOffset = currentIdx * 3
+      const nextOffset = nextIdx * 3
+
+      const x1 = history[currentOffset]
+      const y1 = history[currentOffset + 1]
+      const z1 = history[currentOffset + 2]
+
+      const x2 = history[nextOffset]
+      const y2 = history[nextOffset + 1]
+      const z2 = history[nextOffset + 2]
 
       // 检查是否有效（避免重复点）
-      if (x === nextX && y === nextY && z === nextZ) {
+      if (x1 === x2 && y1 === y2 && z1 === z2) {
         // 使用当前值作为占位
-        trailPositions[segmentOffset] = x
-        trailPositions[segmentOffset + 1] = y
-        trailPositions[segmentOffset + 2] = z
-        trailPositions[segmentOffset + 3] = nextX
-        trailPositions[segmentOffset + 4] = nextY
-        trailPositions[segmentOffset + 5] = nextZ
+        positions[offset + i * 6] = x1
+        positions[offset + i * 6 + 1] = y1
+        positions[offset + i * 6 + 2] = z1
+        positions[offset + i * 6 + 3] = x2
+        positions[offset + i * 6 + 4] = y2
+        positions[offset + i * 6 + 5] = z2
 
         // 设置透明度为 0（不显示）
-        trailColors[segmentOffset] = 0
-        trailColors[segmentOffset + 1] = 0
-        trailColors[segmentOffset + 2] = 0
-        trailColors[segmentOffset + 3] = 0
-        trailColors[segmentOffset + 4] = 0
-        trailColors[segmentOffset + 5] = 0
+        colors[offset + i * 6] = 0
+        colors[offset + i * 6 + 1] = 0
+        colors[offset + i * 6 + 2] = 0
+        colors[offset + i * 6 + 3] = 0
+        colors[offset + i * 6 + 4] = 0
+        colors[offset + i * 6 + 5] = 0
       } else {
         // 设置顶点位置
-        trailPositions[segmentOffset] = x
-        trailPositions[segmentOffset + 1] = y
-        trailPositions[segmentOffset + 2] = z
-        trailPositions[segmentOffset + 3] = nextX
-        trailPositions[segmentOffset + 4] = nextY
-        trailPositions[segmentOffset + 5] = nextZ
+        positions[offset + i * 6] = x1
+        positions[offset + i * 6 + 1] = y1
+        positions[offset + i * 6 + 2] = z1
+        positions[offset + i * 6 + 3] = x2
+        positions[offset + i * 6 + 4] = y2
+        positions[offset + i * 6 + 5] = z2
 
-        // 计算颜色衰减（越老的线段越透明）
-        const opacity = Math.pow(colorDecay, age)
-        trailColors[segmentOffset] = r * opacity
-        trailColors[segmentOffset + 1] = g * opacity
-        trailColors[segmentOffset + 2] = b * opacity
-        trailColors[segmentOffset + 3] = r * opacity
-        trailColors[segmentOffset + 4] = g * opacity
-        trailColors[segmentOffset + 5] = b * opacity
+        // 计算透明度渐变（头部 = 最新位置，尾部 = 最老位置）
+        const headRatio = (i + 1) / (length - 1) // 0 (最老) 到 1 (最新)
+        const opacity = trail.opacity * (0.2 + headRatio * 0.8) // 最小 20%，最大 100%
+
+        // 设置颜色（带透明度）
+        colors[offset + i * 6] = r * opacity
+        colors[offset + i * 6 + 1] = g * opacity
+        colors[offset + i * 6 + 2] = b * opacity
+        colors[offset + i * 6 + 3] = r * opacity
+        colors[offset + i * 6 + 4] = g * opacity
+        colors[offset + i * 6 + 5] = b * opacity
       }
-
-      segmentOffset += 6
     }
   }
 
   /**
-   * 设置轨迹透明度
+   * 设置基础透明度
    *
-   * @param opacity - 透明度 [0, 1]
+   * @param opacity - 基础透明度 [0, 1]
    */
-  setOpacity(opacity: number): void {
-    this.config.opacity = Math.max(0, Math.min(1, opacity))
-    if (this.trailLines.material instanceof THREE.LineBasicMaterial) {
-      this.trailLines.material.opacity = this.config.opacity
-    }
+  setBaseOpacity(opacity: number): void {
+    this.config.baseOpacity = Math.max(0, Math.min(1, opacity))
   }
 
   /**
@@ -304,14 +382,6 @@ export class TrailManager {
       this.trailLines.material.dispose()
 
       // 释放数组内存
-      if (this.historyPositions) {
-        this.historyPositions.fill(0)
-        this.historyPositions = null as any
-      }
-      if (this.historyIndices) {
-        this.historyIndices.fill(0)
-        this.historyIndices = null as any
-      }
       if (this.trailPositions) {
         this.trailPositions.fill(0)
         this.trailPositions = null as any
@@ -320,6 +390,14 @@ export class TrailManager {
         this.trailColors.fill(0)
         this.trailColors = null as any
       }
+
+      // 释放轨迹数据
+      for (const trail of this.particleTrails) {
+        if (trail.history) {
+          trail.history.fill(0)
+        }
+      }
+      this.particleTrails = []
 
       this.disposed = true
     } catch (error) {
