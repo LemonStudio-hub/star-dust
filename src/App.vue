@@ -276,8 +276,7 @@ onMounted(() => {
     particleSize: 1.2,        // 粒子大小
     boundsRadius: 50,         // 边界半径
     velocityScale: 0.08,      // 速度缩放因子
-    maxSpeed: 0.15,          // 最大速度限制
-    enableTrail: true         // 启用粒子轨迹
+    maxSpeed: 0.15            // 最大速度限制
   }
 
   // 创建并启动应用管理器
