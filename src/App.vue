@@ -168,11 +168,11 @@ const CLICK_COUNT = 3 // 需要的点击次数
  * 粒子配置参数
  */
 const particleConfig = reactive({
-  count: 30000,
-  size: 1.2,
-  boundsRadius: 50,
-  velocityScale: 0.08,
-  maxSpeed: 0.15
+  count: 40000,
+  size: 1.0,
+  boundsRadius: 60,
+  velocityScale: 0.1,
+  maxSpeed: 0.18
 })
 
 /**
@@ -272,11 +272,11 @@ onMounted(() => {
 
   // 初始化应用配置
   const config = {
-    particleCount: 30000,    // 粒子数量
-    particleSize: 1.2,        // 粒子大小
-    boundsRadius: 50,         // 边界半径
-    velocityScale: 0.08,      // 速度缩放因子
-    maxSpeed: 0.15            // 最大速度限制
+    particleCount: 40000,    // 粒子数量
+    particleSize: 1.0,        // 粒子大小
+    boundsRadius: 60,         // 边界半径
+    velocityScale: 0.1,       // 速度缩放因子
+    maxSpeed: 0.18            // 最大速度限制
   }
 
   // 创建并启动应用管理器
