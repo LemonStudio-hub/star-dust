@@ -108,10 +108,12 @@ export class RendererAdapter implements IRenderer {
   /**
    * 自动检测并选择最佳渲染器
    * 
-   * 策略：优先使用 WebGPU，只在以下情况降级到 WebGL：
-   * 1. WebGPU API 不支持
-   * 2. WebGPU 初始化失败
-   * 3. 移动设备且 WebGPU 支持不完善（可选）
+   * 策略：默认使用 WebGL，只有在以下情况下启用 WebGPU：
+   * 1. 设备支持 WebGPU API
+   * 2. WebGPU 初始化成功
+   * 
+   * 这样可以确保在大多数情况下使用稳定可靠的 WebGL，
+   * 只有在设备明确支持 WebGPU 时才启用高性能模式。
    * 
    * @private
    */
@@ -123,21 +125,20 @@ export class RendererAdapter implements IRenderer {
     console.log(`  - WebGPU 支持: ${webgpuSupported ? '是' : '否'}`)
     console.log(`  - 移动设备: ${isMobileDevice ? '是' : '否'}`)
     
-    // 优先尝试 WebGPU
+    // 默认初始化 WebGL
+    this.initWebGL()
+    console.log('✓ WebGL 渲染器已启用（默认模式）')
+    
+    // 如果支持 WebGPU，尝试启用以获得更好的性能
     if (webgpuSupported) {
       try {
-        console.log('正在尝试初始化 WebGPU 渲染器...')
+        console.log('正在尝试升级到 WebGPU 渲染器...')
         await this.initWebGPU()
-        console.log('✓ WebGPU 渲染器已启用（高性能模式）')
-        return
+        console.log('✓ 已成功升级到 WebGPU 渲染器（高性能模式）')
       } catch (error) {
-        console.warn('WebGPU 渲染器初始化失败，降级到 WebGL:', error)
-        console.log('降级原因：WebGPU 初始化失败')
-        this.initWebGL()
+        console.warn('WebGPU 渲染器初始化失败，继续使用 WebGL:', error)
+        console.log('当前使用 WebGL 渲染器（兼容模式）')
       }
-    } else {
-      console.log('WebGPU 不支持，使用 WebGL 渲染器')
-      this.initWebGL()
     }
   }
 
