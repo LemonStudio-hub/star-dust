@@ -288,7 +288,15 @@ onMounted(() => {
     particleSize: 1.0,        // 粒子大小
     boundsRadius: 60,         // 边界半径
     velocityScale: 0.1,       // 速度缩放因子
-    maxSpeed: 0.18            // 最大速度限制
+    maxSpeed: 0.18,           // 最大速度限制
+    enableTrails: true,       // 启用粒子轨迹
+    trailConfig: {            // 轨迹配置
+      length: 8,              // 轨迹长度（历史位置数量）
+      maxAge: 45,             // 轨迹最大寿命（帧数）
+      color: [0.5, 0.8, 1.0], // 轨迹颜色（RGB，0-1）
+      opacity: 0.4,           // 轨迹透明度
+      lineWidth: 1.2          // 轨迹宽度
+    }
   }
 
   // 创建并启动应用管理器

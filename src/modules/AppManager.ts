@@ -10,6 +10,7 @@
 import * as THREE from 'three'
 import { NoiseTexture } from './noise/NoiseTexture'
 import { ParticleSystem, ParticleConfig } from './particles/ParticleSystem'
+import { TrailConfig } from './particles/TrailManager'
 import { MouseInteraction, TouchInteraction, GestureHandler } from './interaction'
 import { Renderer, RendererConfig } from './renderer/Renderer'
 import { ColorManager, ColorTheme } from './colors/ColorTheme'
@@ -30,6 +31,10 @@ export interface AppConfig {
   velocityScale: number
   /** 最大速度 */
   maxSpeed: number
+  /** 是否启用轨迹 */
+  enableTrails?: boolean
+  /** 轨迹配置（仅当 enableTrails 为 true 时生效） */
+  trailConfig?: TrailConfig
 }
 
 /**
@@ -274,7 +279,9 @@ export class AppManager {
         size: config.particleSize,
         boundsRadius: config.boundsRadius,
         velocityScale: config.velocityScale,
-        maxSpeed: config.maxSpeed
+        maxSpeed: config.maxSpeed,
+        enableTrails: config.enableTrails || false,
+        trailConfig: config.trailConfig
       }
       this.particleSystem = new ParticleSystem(this.renderer.scene, particleConfig, this.noiseTexture)
 

@@ -11,6 +11,7 @@ import * as THREE from 'three'
 import { NoiseTexture, NoiseVector } from '../noise/NoiseTexture'
 import { ColorManager, ColorTheme } from '../colors/ColorManager'
 import { DefaultColorTheme } from '../colors/ColorTheme'
+import { TrailManager, TrailConfig } from './TrailManager'
 
 /**
  * 粒子系统配置接口
@@ -28,6 +29,10 @@ export interface ParticleConfig {
   velocityScale: number
   /** 最大速度限制 */
   maxSpeed: number
+  /** 是否启用轨迹 */
+  enableTrails?: boolean
+  /** 轨迹配置（仅当 enableTrails 为 true 时生效） */
+  trailConfig?: TrailConfig
 }
 
 /**
@@ -49,6 +54,8 @@ export interface ParticleConfig {
 export class ParticleSystem {
   /** Three.js 点云对象 */
   public points: THREE.Points
+  /** 轨迹管理器（可选） */
+  public trailManager: TrailManager | null = null
   /** 粒子位置数组 */
   private positions: Float32Array | null = null
   /** 粒子速度数组 */
@@ -77,7 +84,15 @@ export class ParticleSystem {
    *   size: 1.2,
    *   boundsRadius: 50,
    *   velocityScale: 0.08,
-   *   maxSpeed: 0.15
+   *   maxSpeed: 0.15,
+   *   enableTrails: true,
+   *   trailConfig: {
+   *     length: 8,
+   *     maxAge: 45,
+   *     color: [0.5, 0.8, 1.0],
+   *     opacity: 0.5,
+   *     lineWidth: 1.5
+   *   }
    * };
    * const particleSystem = new ParticleSystem(scene, config, noiseTexture, true);
    * ```
@@ -92,6 +107,11 @@ export class ParticleSystem {
     this.noiseTexture = noiseTexture
     this.points = this.create(useDefaultColor)
     scene.add(this.points)
+    
+    // 如果启用了轨迹，初始化轨迹管理器
+    if (config.enableTrails && config.trailConfig) {
+      this.trailManager = new TrailManager(scene, config.count, config.trailConfig)
+    }
   }
 
   /**
@@ -187,6 +207,7 @@ export class ParticleSystem {
      * 4. 更新位置
      * 5. 检查边界条件
      * 6. 更新颜色（如果有颜色管理器）
+     * 7. 更新轨迹（如果启用了轨迹）
      *
      * @param time - 当前时间，用于噪声采样
      * @param deltaTime - 时间增量（毫秒），用于颜色动画
@@ -269,6 +290,11 @@ export class ParticleSystem {
   
                   this.updateColors()
   
+                }
+                
+                // 更新轨迹（如果启用了轨迹）
+                if (this.trailManager) {
+                  this.trailManager.update(positions)
                 }      } catch (error) {
         console.error('更新粒子系统时发生错误:', error)
       }
@@ -368,6 +394,12 @@ export class ParticleSystem {
     }
 
     try {
+      // 释放轨迹管理器
+      if (this.trailManager) {
+        this.trailManager.dispose(scene)
+        this.trailManager = null
+      }
+
       scene.remove(this.points)
       this.points.geometry.dispose()
       this.points.material.dispose()
@@ -446,8 +478,77 @@ export class ParticleSystem {
       if (config.maxSpeed !== undefined) {
         this.config.maxSpeed = config.maxSpeed
       }
+
+      // 更新轨迹配置
+      if (config.trailConfig !== undefined && this.trailManager) {
+        if (config.trailConfig.color !== undefined) {
+          this.trailManager.setColor(config.trailConfig.color)
+        }
+        if (config.trailConfig.opacity !== undefined) {
+          this.trailManager.setOpacity(config.trailConfig.opacity)
+        }
+        if (config.trailConfig.maxAge !== undefined) {
+          this.trailManager.setMaxAge(config.trailConfig.maxAge)
+        }
+        if (config.trailConfig.lineWidth !== undefined) {
+          this.trailManager.setLineWidth(config.trailConfig.lineWidth)
+        }
+      }
     } catch (error) {
       console.error('更新粒子系统配置时发生错误:', error)
     }
+  }
+
+  /**
+   * 设置轨迹颜色
+   * 
+   * @param color - RGB 颜色值（0-1）
+   */
+  setTrailColor(color: [number, number, number]): void {
+    if (this.trailManager) {
+      this.trailManager.setColor(color)
+    }
+  }
+
+  /**
+   * 设置轨迹透明度
+   * 
+   * @param opacity - 透明度值（0-1）
+   */
+  setTrailOpacity(opacity: number): void {
+    if (this.trailManager) {
+      this.trailManager.setOpacity(opacity)
+    }
+  }
+
+  /**
+   * 设置轨迹最大寿命
+   * 
+   * @param maxAge - 最大寿命（帧数）
+   */
+  setTrailMaxAge(maxAge: number): void {
+    if (this.trailManager) {
+      this.trailManager.setMaxAge(maxAge)
+    }
+  }
+
+  /**
+   * 设置轨迹宽度
+   * 
+   * @param lineWidth - 宽度值
+   */
+  setTrailLineWidth(lineWidth: number): void {
+    if (this.trailManager) {
+      this.trailManager.setLineWidth(lineWidth)
+    }
+  }
+
+  /**
+   * 获取轨迹管理器
+   * 
+   * @returns 轨迹管理器实例，如果没有启用轨迹则返回 null
+   */
+  getTrailManager(): TrailManager | null {
+    return this.trailManager
   }
 }
