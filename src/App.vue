@@ -1,5 +1,12 @@
 <template>
   <div ref="container" class="particle-container">
+    <!-- 加载指示器 -->
+    <transition name="loader-fade">
+      <div v-if="isLoading" class="loader">
+        <div class="loader-ring"></div>
+      </div>
+    </transition>
+    
     <canvas ref="canvas"></canvas>
     
     <!-- 仪表盘遮罩 -->
@@ -158,6 +165,11 @@ const canvas = ref<HTMLCanvasElement>()
 const showDashboard = ref(false)
 
 /**
+ * 加载状态
+ */
+const isLoading = ref(true)
+
+/**
  * 三连击检测相关变量
  */
 const clickTimestamps = ref<number[]>([])
@@ -283,6 +295,9 @@ onMounted(() => {
   appManager = new AppManager(container.value, canvas.value, config)
   console.log('Application initialized successfully')
 
+  // 隐藏加载指示器
+  isLoading.value = false
+
   // 添加点击事件监听
   if (container.value) {
     container.value.addEventListener('click', handleClick)
@@ -330,6 +345,53 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
+/**
+ * 加载指示器样式
+ */
+.loader {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, #0a0a0f 0%, #1a1a2e 100%);
+  z-index: 9999;
+}
+
+.loader-ring {
+  width: 60px;
+  height: 60px;
+  border-radius: 50%;
+  border: 3px solid transparent;
+  border-top-color: rgba(99, 102, 241, 0.8);
+  border-right-color: rgba(168, 85, 247, 0.8);
+  border-bottom-color: rgba(236, 72, 153, 0.8);
+  border-left-color: rgba(99, 102, 241, 0.3);
+  animation: loader-spin 1s linear infinite;
+}
+
+@keyframes loader-spin {
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
+}
+
+.loader-fade-enter-active,
+.loader-fade-leave-active {
+  transition: opacity 0.5s ease;
+}
+
+.loader-fade-enter-from,
+.loader-fade-leave-to {
+  opacity: 0;
+}
+
 /**
  * 粒子容器样式
  * 
