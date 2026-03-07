@@ -1,5 +1,6 @@
 <template>
   <div class="color-theme-panel">
+    <!-- 颜色主题选择 -->
     <div class="control-group">
       <label class="control-label">
         <span class="label-text">颜色主题</span>
@@ -32,6 +33,52 @@
       </div>
     </div>
 
+    <!-- 自定义颜色编辑器 -->
+    <div class="control-group">
+      <label class="control-label">
+        <span class="label-text">自定义颜色</span>
+        <button class="action-button" @click="toggleColorEditor">
+          {{ showColorEditor ? '收起' : '展开' }}
+        </button>
+      </label>
+      <transition name="expand">
+        <div v-if="showColorEditor" class="color-editor">
+          <div class="color-stop-editor" v-for="(stop, index) in customColorStops" :key="index">
+            <div class="color-stop-header">
+              <span class="color-stop-index">{{ index + 1 }}</span>
+              <button class="color-stop-remove" @click="removeColorStop(index)" v-if="customColorStops.length > 2">
+                ×
+              </button>
+            </div>
+            <div class="color-stop-controls">
+              <input
+                type="color"
+                :value="rgbToHex(stop.color)"
+                @input="updateColorStop(index, $event)"
+                class="color-input"
+              >
+              <input
+                type="range"
+                :value="stop.position"
+                @input="updateColorPosition(index, $event)"
+                min="0"
+                max="1"
+                step="0.01"
+                class="position-input"
+              >
+            </div>
+          </div>
+          <button class="add-color-stop" @click="addColorStop">
+            + 添加颜色
+          </button>
+          <button class="apply-custom-theme" @click="applyCustomTheme">
+            应用自定义主题
+          </button>
+        </div>
+      </transition>
+    </div>
+
+    <!-- 动画速度 -->
     <div class="control-group">
       <label class="control-label">
         <span class="label-text">动画速度</span>
@@ -48,6 +95,7 @@
       >
     </div>
 
+    <!-- 颜色动画开关 -->
     <div class="control-group">
       <label class="control-label">
         <span class="label-text">颜色动画</span>
@@ -56,13 +104,34 @@
         </div>
       </label>
     </div>
+
+    <!-- 配置导入/导出 -->
+    <div class="control-group">
+      <label class="control-label">
+        <span class="label-text">配置管理</span>
+      </label>
+      <div class="config-actions">
+        <button class="config-button" @click="exportConfig">
+          📥 导出配置
+        </button>
+        <label class="config-button import-button">
+          📤 导入配置
+          <input
+            type="file"
+            accept=".json"
+            @change="importConfig"
+            class="config-file-input"
+          >
+        </label>
+      </div>
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref } from 'vue'
 import { PRESET_THEMES, getPresetTheme } from '../modules/colors/presets'
-import type { ColorTheme } from '../modules/colors/ColorTheme'
+import type { ColorTheme, ColorStop } from '../modules/colors/ColorTheme'
 
 /**
  * AppManager 接口定义
@@ -71,6 +140,8 @@ interface AppManager {
   setColorTheme(theme: ColorTheme): void
   setColorAnimationSpeedMultiplier(multiplier: number): void
   setColorAnimationEnabled(enabled: boolean): void
+  exportConfig(): string
+  importConfig(configJson: string): boolean
 }
 
 interface Props {
@@ -82,8 +153,16 @@ const props = defineProps<Props>()
 const currentThemeName = ref('默认')
 const animationEnabled = ref(true)
 const animationSpeed = ref(0.5)
+const showColorEditor = ref(false)
 
 const themes = PRESET_THEMES
+
+// 自定义颜色主题
+const customColorStops = ref<ColorStop[]>([
+  { color: [1.0, 0.2, 0.5], position: 0.0 },
+  { color: [0.2, 0.8, 1.0], position: 0.5 },
+  { color: [0.9, 0.2, 1.0], position: 1.0 }
+])
 
 const selectTheme = (themeName: string): void => {
   const theme = getPresetTheme(themeName)
@@ -106,6 +185,104 @@ const toggleAnimation = (): void => {
   if (props.appManager) {
     props.appManager.setColorAnimationEnabled(animationEnabled.value)
   }
+}
+
+const toggleColorEditor = (): void => {
+  showColorEditor.value = !showColorEditor.value
+}
+
+const addColorStop = (): void => {
+  if (customColorStops.value.length < 10) {
+    customColorStops.value.push({
+      color: [1.0, 1.0, 1.0],
+      position: 0.5
+    })
+  }
+}
+
+const removeColorStop = (index: number): void => {
+  if (customColorStops.value.length > 2) {
+    customColorStops.value.splice(index, 1)
+  }
+}
+
+const updateColorStop = (index: number, event: Event): void => {
+  const target = event.target as HTMLInputElement
+  const hex = target.value
+  const rgb = hexToRgb(hex)
+  customColorStops.value[index].color = rgb
+}
+
+const updateColorPosition = (index: number, event: Event): void => {
+  const target = event.target as HTMLInputElement
+  customColorStops.value[index].position = parseFloat(target.value)
+}
+
+const applyCustomTheme = (): void => {
+  const customTheme: ColorTheme = {
+    name: '自定义',
+    description: '用户自定义的颜色主题',
+    colors: [...customColorStops.value],
+    gradientType: 'linear',
+    animationType: 'none'
+  }
+  
+  if (props.appManager) {
+    props.appManager.setColorTheme(customTheme)
+    currentThemeName.value = '自定义'
+  }
+}
+
+const exportConfig = (): void => {
+  if (props.appManager) {
+    const configJson = props.appManager.exportConfig()
+    const blob = new Blob([configJson], { type: 'application/json' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `xingchen-config-${Date.now()}.json`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+}
+
+const importConfig = (event: Event): void => {
+  const target = event.target as HTMLInputElement
+  const file = target.files[0]
+  
+  if (file && props.appManager) {
+    const reader = new FileReader()
+    reader.onload = (e) => {
+      const configJson = e.target?.result as string
+      const success = props.appManager.importConfig(configJson)
+      if (success) {
+        alert('配置导入成功！')
+      } else {
+        alert('配置导入失败，请检查文件格式。')
+      }
+    }
+    reader.readAsText(file)
+  }
+  
+  // 清空文件输入
+  target.value = ''
+}
+
+const rgbToHex = (rgb: [number, number, number]): string => {
+  const toHex = (n: number) => {
+    const hex = Math.round(n * 255).toString(16)
+    return hex.length === 1 ? '0' + hex : hex
+  }
+  return `#${toHex(rgb[0])}${toHex(rgb[1])}${toHex(rgb[2])}`
+}
+
+const hexToRgb = (hex: string): [number, number, number] => {
+  const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex)
+  return result ? [
+    parseInt(result[1], 16) / 255,
+    parseInt(result[2], 16) / 255,
+    parseInt(result[3], 16) / 255
+  ] : [1, 1, 1]
 }
 </script>
 
@@ -143,6 +320,22 @@ const toggleAnimation = (): void => {
   min-width: 50px;
   text-align: center;
   font-feature-settings: 'tnum' 1;
+}
+
+.action-button {
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 8px;
+  padding: 4px 12px;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.9);
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.action-button:hover {
+  background: rgba(255, 255, 255, 0.15);
+  border-color: rgba(255, 255, 255, 0.3);
 }
 
 .control-slider {
@@ -302,5 +495,168 @@ const toggleAnimation = (): void => {
   left: 22px;
   background: linear-gradient(135deg, #6366f1 0%, #a855f7 100%);
   box-shadow: 0 2px 8px rgba(99, 102, 241, 0.4);
+}
+
+.color-editor {
+  margin-top: 12px;
+  padding: 16px;
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.color-stop-editor {
+  margin-bottom: 12px;
+  padding: 12px;
+  background: rgba(0, 0, 0, 0.3);
+  border-radius: 8px;
+}
+
+.color-stop-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.color-stop-index {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.9);
+  font-weight: 500;
+}
+
+.color-stop-remove {
+  background: rgba(255, 100, 100, 0.2);
+  border: 1px solid rgba(255, 100, 100, 0.3);
+  border-radius: 4px;
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: rgba(255, 100, 100, 0.9);
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.color-stop-remove:hover {
+  background: rgba(255, 100, 100, 0.3);
+  border-color: rgba(255, 100, 100, 0.5);
+}
+
+.color-stop-controls {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+.color-input {
+  flex: 1;
+  height: 36px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 6px;
+  padding: 4px 8px;
+  background: rgba(0, 0, 0, 0.2);
+  color: #ffffff;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.color-input:hover {
+  border-color: rgba(255, 255, 255, 0.3);
+}
+
+.position-input {
+  flex: 2;
+}
+
+.add-color-stop,
+.apply-custom-theme {
+  width: 100%;
+  padding: 10px 16px;
+  background: linear-gradient(135deg, rgba(99, 102, 241, 0.8) 0%, rgba(168, 85, 247, 0.8) 100%);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 8px;
+  color: #ffffff;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  margin-top: 8px;
+}
+
+.add-color-stop:hover,
+.apply-custom-theme:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(99, 102, 241, 0.4);
+}
+
+.add-color-stop:active,
+.apply-custom-theme:active {
+  transform: translateY(0);
+}
+
+.config-actions {
+  display: flex;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.config-button {
+  flex: 1;
+  padding: 10px 16px;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 8px;
+  color: rgba(255, 255, 255, 0.9);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  text-align: center;
+}
+
+.config-button:hover {
+  background: rgba(255, 255, 255, 0.15);
+  border-color: rgba(255, 255, 255, 0.3);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.config-button:active {
+  transform: translateY(0);
+}
+
+.import-button {
+  position: relative;
+  overflow: hidden;
+}
+
+.config-file-input {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.expand-enter-active,
+.expand-leave-active {
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  overflow: hidden;
+}
+
+.expand-enter-from,
+.expand-leave-to {
+  max-height: 0;
+  opacity: 0;
+}
+
+.expand-enter-to,
+.expand-leave-from {
+  max-height: 500px;
+  opacity: 1;
 }
 </style>

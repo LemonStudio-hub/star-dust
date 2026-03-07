@@ -633,4 +633,89 @@ export class AppManager {
       console.error('更新配置时发生错误:', error)
     }
   }
+
+  /**
+   * 导出当前配置
+   * 
+   * 将当前的粒子配置和颜色主题导出为 JSON 字符串。
+   * 
+   * @returns JSON 格式的配置字符串
+   * 
+   * @example
+   * ```typescript
+   * const configJson = appManager.exportConfig();
+   * // 下载配置文件
+   * const blob = new Blob([configJson], { type: 'application/json' });
+   * const url = URL.createObjectURL(blob);
+   * const a = document.createElement('a');
+   * a.href = url;
+   * a.download = 'xingchen-config.json';
+   * a.click();
+   * ```
+   */
+  exportConfig(): string {
+    try {
+      const config = {
+        version: '1.0.0',
+        timestamp: new Date().toISOString(),
+        particle: this.particleSystem.getConfig(),
+        theme: this.particleSystem.getColorManager()?.getCurrentTheme(),
+        performance: {
+          updateInterval: this.perfUpdateInterval
+        }
+      }
+      return JSON.stringify(config, null, 2)
+    } catch (error) {
+      console.error('导出配置时发生错误:', error)
+      throw new Error(`导出配置失败: ${error instanceof Error ? error.message : String(error)}`)
+    }
+  }
+
+  /**
+   * 导入配置
+   * 
+   * 从 JSON 字符串导入配置并应用到应用中。
+   * 
+   * @param configJson - JSON 格式的配置字符串
+   * @returns 导入是否成功
+   * 
+   * @example
+   * ```typescript
+   * const success = appManager.importConfig(configJson);
+   * if (success) {
+   *   console.log('配置导入成功');
+   * }
+   * ```
+   */
+  importConfig(configJson: string): boolean {
+    try {
+      const config = JSON.parse(configJson)
+      
+      // 验证配置版本
+      if (!config.version) {
+        console.warn('配置缺少版本信息')
+      }
+
+      // 导入粒子配置
+      if (config.particle) {
+        this.updateConfig(config.particle)
+      }
+
+      // 导入颜色主题
+      if (config.theme) {
+        this.setColorTheme(config.theme)
+      }
+
+      // 导入性能配置
+      if (config.performance?.updateInterval) {
+        this.setPerformanceUpdateInterval(config.performance.updateInterval)
+      }
+
+      console.log('配置导入成功')
+      return true
+    } catch (error) {
+      console.error('导入配置时发生错误:', error)
+      return false
+    }
+  }
 }
