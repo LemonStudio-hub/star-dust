@@ -208,7 +208,7 @@ export class AppManager {
 
       // 步骤 2：预计算噪声纹理（使用 Web Worker）
       console.log('初始化噪声纹理（Web Worker）...')
-      this.noiseTexture = new NoiseTexture(undefined, () => {
+      this.noiseTexture = new NoiseTexture(64, () => {
         // 噪声纹理准备好后继续初始化
         this.continueInitialization(config)
       })

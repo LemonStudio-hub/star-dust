@@ -8,7 +8,15 @@
     </transition>
     
     <canvas ref="canvas"></canvas>
-    
+
+    <!-- 设置按钮（齿轮图标） -->
+    <button class="settings-button" @click="openDashboard" title="打开设置">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <circle cx="12" cy="12" r="3"></circle>
+        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+      </svg>
+    </button>
+
     <!-- 仪表盘遮罩 -->
     <transition name="fade">
       <div v-if="showDashboard" class="dashboard-overlay" @click="closeDashboard">
@@ -45,6 +53,30 @@
                     {{ perfMetrics.statusText }}
                   </span>
                 </div>
+              </div>
+            </div>
+
+            <!-- 颜色主题 -->
+            <div class="theme-section">
+              <div class="theme-title">颜色主题</div>
+              <div class="theme-grid">
+                <button
+                  v-for="theme in presetThemes"
+                  :key="theme.name"
+                  :class="['theme-button', { active: currentTheme.name === theme.name }]"
+                  @click="changeTheme(theme)"
+                  :title="theme.description"
+                >
+                  <div class="theme-preview">
+                    <div
+                      v-for="(color, index) in theme.colors"
+                      :key="index"
+                      class="theme-color"
+                      :style="{ background: `rgb(${color.color[0] * 255}, ${color.color[1] * 255}, ${color.color[2] * 255})` }"
+                    ></div>
+                  </div>
+                  <div class="theme-name">{{ theme.name }}</div>
+                </button>
               </div>
             </div>
 
@@ -146,6 +178,8 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, reactive, computed } from 'vue'
 import { AppManager } from './modules/AppManager'
+import { PRESET_THEMES } from './modules/colors/presets'
+import type { ColorTheme } from './modules/colors/ColorTheme'
 
 /**
  * 容器元素引用
@@ -210,6 +244,28 @@ const fpsClass = computed(() => {
   if (perfMetrics.fps >= 30) return 'fps-medium'
   return 'fps-poor'
 })
+
+/**
+ * 当前选中的颜色主题
+ */
+const currentTheme = ref<ColorTheme>(PRESET_THEMES[0])
+
+/**
+ * 所有预设主题
+ */
+const presetThemes = PRESET_THEMES
+
+/**
+ * 切换颜色主题
+ *
+ * @param theme - 要切换的主题
+ */
+const changeTheme = (theme: ColorTheme): void => {
+  if (appManager) {
+    currentTheme.value = theme
+    appManager.setColorTheme(theme)
+  }
+}
 
 /**
  * 应用管理器实例
@@ -279,56 +335,85 @@ const resetConfig = (): void => {
 onMounted(() => {
   if (!container.value || !canvas.value) {
     console.error('Container or canvas element not found')
+    isLoading.value = false
     return
   }
 
-  // 初始化应用配置
-  const config = {
-    particleCount: 40000,    // 粒子数量
-    particleSize: 1.0,        // 粒子大小
-    boundsRadius: 60,         // 边界半径
-    velocityScale: 0.1,       // 速度缩放因子
-    maxSpeed: 0.18,           // 最大速度限制
-    enableTrails: true,       // 启用粒子轨迹
-    trailConfig: {            // 轨迹配置
-      length: 8,              // 轨迹长度（历史位置数量）
-      maxAge: 45,             // 轨迹最大寿命（帧数）
-      color: [0.5, 0.8, 1.0], // 轨迹颜色（RGB，0-1）
-      opacity: 0.4,           // 轨迹透明度
-      lineWidth: 1.2          // 轨迹宽度
+  try {
+    // 初始化应用配置
+    const config = {
+      particleCount: 40000,    // 粒子数量
+      particleSize: 1.0,        // 粒子大小
+      boundsRadius: 60,         // 边界半径
+      velocityScale: 0.1,       // 速度缩放因子
+      maxSpeed: 0.18,           // 最大速度限制
+      enableTrails: true,       // 启用粒子轨迹
+      trailConfig: {            // 轨迹配置
+        length: 8,              // 轨迹长度（历史位置数量）
+        maxAge: 45,             // 轨迹最大寿命（帧数）
+        color: [0.5, 0.8, 1.0], // 轨迹颜色（RGB，0-1）
+        opacity: 0.4,           // 轨迹透明度
+        lineWidth: 1.2          // 轨迹宽度
+      }
     }
-  }
 
-  // 创建并启动应用管理器
-  appManager = new AppManager(container.value, canvas.value, config)
-  console.log('Application initialized successfully')
+    // 创建并启动应用管理器
+    console.log('[App.vue] 开始创建 AppManager...')
+    appManager = new AppManager(container.value, canvas.value, config)
+    console.log('[App.vue] AppManager 创建成功')
 
-  // 隐藏加载指示器
-  isLoading.value = false
-
-  // 添加点击事件监听
-  if (container.value) {
-    container.value.addEventListener('click', handleClick)
-    container.value.addEventListener('touchend', handleClick)
-  }
-
-  // 设置性能监控回调
-  appManager.setPerformanceCallback((fps, frameTime) => {
-    perfMetrics.fps = fps
-    perfMetrics.frameTime = frameTime
-
-    // 更新状态
-    if (fps >= 50) {
-      perfMetrics.status = 'good'
-      perfMetrics.statusText = '流畅'
-    } else if (fps >= 30) {
-      perfMetrics.status = 'medium'
-      perfMetrics.statusText = '一般'
-    } else {
-      perfMetrics.status = 'poor'
-      perfMetrics.statusText = '卡顿'
+    // 设置默认颜色主题
+    if (appManager) {
+      try {
+        appManager.setColorTheme(currentTheme.value)
+        console.log('[App.vue] 默认主题设置成功:', currentTheme.value.name)
+      } catch (themeError) {
+        console.error('[App.vue] 设置主题失败:', themeError)
+      }
     }
-  })
+
+    // 添加点击事件监听
+    if (container.value) {
+      container.value.addEventListener('click', handleClick)
+      container.value.addEventListener('touchend', handleClick)
+    }
+
+    // 设置性能监控回调
+    if (appManager) {
+      appManager.setPerformanceCallback((fps, frameTime) => {
+        perfMetrics.fps = fps
+        perfMetrics.frameTime = frameTime
+
+        // 更新状态
+        if (fps >= 50) {
+          perfMetrics.status = 'good'
+          perfMetrics.statusText = '流畅'
+        } else if (fps >= 30) {
+          perfMetrics.status = 'medium'
+          perfMetrics.statusText = '一般'
+        } else {
+          perfMetrics.status = 'poor'
+          perfMetrics.statusText = '卡顿'
+        }
+      })
+    }
+
+    console.log('[App.vue] 应用初始化完成')
+  } catch (error) {
+    console.error('[App.vue] 应用初始化失败:', error)
+    const errorMessage = error instanceof Error ? error.message : String(error)
+    console.error('[App.vue] 错误详情:', errorMessage)
+
+    // 隐藏加载指示器
+    isLoading.value = false
+
+    // 可以在这里显示错误信息给用户
+    alert(`应用初始化失败: ${errorMessage}\n\n请刷新页面重试。`)
+  } finally {
+    // 确保加载指示器被隐藏
+    isLoading.value = false
+    console.log('[App.vue] 加载指示器已隐藏')
+  }
 })
 
 /**
@@ -446,6 +531,48 @@ canvas {
   /* 3D 透视设置 */
   backface-visibility: hidden;
   -webkit-backface-visibility: hidden;
+}
+
+/**
+ * 设置按钮（齿轮图标）
+ */
+.settings-button {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  width: 48px;
+  height: 48px;
+  background: rgba(255, 255, 255, 0.15);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 12px;
+  color: rgba(255, 255, 255, 0.9);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  z-index: 100;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+  padding: 0;
+  background: transparent;
+}
+
+.settings-button:hover {
+  background: rgba(255, 255, 255, 0.25);
+  border-color: rgba(255, 255, 255, 0.3);
+  color: #ffffff;
+  transform: rotate(90deg) scale(1.05);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.3);
+}
+
+.settings-button:active {
+  transform: rotate(90deg) scale(0.95);
+}
+
+.settings-button svg {
+  transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 /**
@@ -674,6 +801,112 @@ canvas {
 .status-badge.poor {
   background: rgba(239, 68, 68, 0.2);
   color: #ef4444;
+}
+
+/**
+ * 主题选择器部分
+ */
+.theme-section {
+  margin-bottom: 28px;
+  padding: 20px;
+  background: linear-gradient(
+    135deg,
+    rgba(16, 185, 129, 0.15) 0%,
+    rgba(6, 182, 212, 0.15) 50%,
+    rgba(59, 130, 246, 0.15) 100%
+  );
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 16px;
+}
+
+/**
+ * 主题选择器标题
+ */
+.theme-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.9);
+  margin-bottom: 16px;
+  letter-spacing: 0.3px;
+}
+
+/**
+ * 主题网格布局
+ */
+.theme-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+}
+
+/**
+ * 主题按钮
+ */
+.theme-button {
+  padding: 12px;
+  background: rgba(0, 0, 0, 0.2);
+  border: 2px solid rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
+  cursor: pointer;
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+.theme-button:hover {
+  background: rgba(0, 0, 0, 0.3);
+  border-color: rgba(255, 255, 255, 0.3);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+}
+
+.theme-button:active {
+  transform: translateY(0);
+}
+
+.theme-button.active {
+  background: rgba(255, 255, 255, 0.15);
+  border-color: rgba(99, 102, 241, 0.6);
+  box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.3);
+}
+
+/**
+ * 主题预览
+ */
+.theme-preview {
+  width: 100%;
+  height: 24px;
+  border-radius: 4px;
+  overflow: hidden;
+  display: flex;
+}
+
+.theme-color {
+  flex: 1;
+  height: 100%;
+  transition: all 0.3s ease;
+}
+
+/**
+ * 主题名称
+ */
+.theme-name {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.9);
+  font-weight: 500;
+  text-align: center;
+  letter-spacing: 0.2px;
+}
+
+/**
+ * 响应式设计 - 主题网格
+ */
+@media (max-width: 480px) {
+  .theme-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
 }
 
 /**
