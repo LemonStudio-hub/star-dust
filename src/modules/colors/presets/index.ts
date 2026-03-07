@@ -25,7 +25,9 @@ export const PRESET_THEMES: ColorTheme[] = [
   NatureTheme,
   CoolToneTheme,
   WarmToneTheme,
-  RainbowTheme
+  RainbowTheme,
+  SpeedFlowTheme,
+  RadialGlowTheme
 ]
 
 /**
