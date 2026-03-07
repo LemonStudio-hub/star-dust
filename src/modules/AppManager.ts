@@ -201,29 +201,12 @@ export class AppManager {
       }
       this.renderer = new Renderer(rendererConfig)
 
-      // 步骤 2：预计算噪声纹理
-      console.log('初始化噪声纹理...')
-      this.noiseTexture = new NoiseTexture()
-
-      // 步骤 3：创建粒子系统
-      console.log('创建粒子系统...')
-      const particleConfig: ParticleConfig = {
-        count: config.particleCount,
-        size: config.particleSize,
-        boundsRadius: config.boundsRadius,
-        velocityScale: config.velocityScale,
-        maxSpeed: config.maxSpeed
-      }
-      this.particleSystem = new ParticleSystem(this.renderer.scene, particleConfig, this.noiseTexture)
-
-      // 步骤 4：初始化交互系统
-      console.log('初始化交互系统...')
-      this.initializeInteractions()
-
-      // 步骤 5：启动主循环
-      console.log('启动应用...')
-      this.lastFrameTime = performance.now()
-      this.animate(this.lastFrameTime)
+      // 步骤 2：预计算噪声纹理（使用 Web Worker）
+      console.log('初始化噪声纹理（Web Worker）...')
+      this.noiseTexture = new NoiseTexture(undefined, () => {
+        // 噪声纹理准备好后继续初始化
+        this.continueInitialization(config)
+      })
     } catch (error) {
       console.error('应用初始化过程中发生错误:', error)
       // 尝试清理已初始化的资源
@@ -274,6 +257,46 @@ export class AppManager {
 
     // 监听窗口大小变化
     window.addEventListener('resize', this.handleResize)
+  }
+
+  /**
+   * 继续初始化应用（噪声纹理准备好后调用）
+   *
+   * @param config - 应用配置
+   * @private
+   */
+  private continueInitialization(config: AppConfig): void {
+    try {
+      // 步骤 3：创建粒子系统
+      console.log('创建粒子系统...')
+      const particleConfig: ParticleConfig = {
+        count: config.particleCount,
+        size: config.particleSize,
+        boundsRadius: config.boundsRadius,
+        velocityScale: config.velocityScale,
+        maxSpeed: config.maxSpeed
+      }
+      this.particleSystem = new ParticleSystem(this.renderer.scene, particleConfig, this.noiseTexture)
+
+      // 步骤 4：初始化交互系统
+      console.log('初始化交互系统...')
+      this.initializeInteractions()
+    
+          // 步骤 5：启动主循环
+          // 步骤 5：启动主循环
+      console.log('启动应用...')
+      this.lastFrameTime = performance.now()
+      this.animate(this.lastFrameTime)
+    } catch (error) {
+      console.error('应用继续初始化过程中发生错误:', error)
+      // 尝试清理已初始化的资源
+      try {
+        this.dispose()
+      } catch (cleanupError) {
+        console.error('清理资源时发生错误:', cleanupError)
+      }
+      throw error
+    }
   }
 
   /**
