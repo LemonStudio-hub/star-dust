@@ -54,7 +54,7 @@
                 </div>
                 <div class="performance-item">
                   <span class="performance-label">粒子数量</span>
-                  <span class="performance-value">{{ particleConfig.count.toLocaleString() }}</span>
+                  <span class="performance-value">{{ particleConfig.particleCount.toLocaleString() }}</span>
                 </div>
                 <div class="performance-item">
                   <span class="performance-label">状态</span>
@@ -115,11 +115,11 @@
             <div class="control-group">
               <label class="control-label">
                 <span class="label-text">粒子数量</span>
-                <span class="label-value">{{ particleConfig.count }}</span>
+                <span class="label-value">{{ particleConfig.particleCount }}</span>
               </label>
               <input 
                 type="range" 
-                v-model.number="particleConfig.count" 
+                v-model.number="particleConfig.particleCount" 
                 min="1000" 
                 max="100000" 
                 step="1000"
@@ -132,11 +132,11 @@
             <div class="control-group">
               <label class="control-label">
                 <span class="label-text">粒子大小</span>
-                <span class="label-value">{{ particleConfig.size.toFixed(2) }}</span>
+                <span class="label-value">{{ particleConfig.particleSize.toFixed(2) }}</span>
               </label>
               <input 
                 type="range" 
-                v-model.number="particleConfig.size" 
+                v-model.number="particleConfig.particleSize" 
                 min="0.1" 
                 max="5" 
                 step="0.1"
@@ -265,8 +265,8 @@ const CLICK_COUNT = 3 // 需要的点击次数
  * 粒子配置参数
  */
 const particleConfig = reactive({
-  count: 40000,
-  size: 1.0,
+  particleCount: 40000,
+  particleSize: 1.0,
   boundsRadius: 60,
   velocityScale: 0.1,
   maxSpeed: 0.18
@@ -414,9 +414,9 @@ const updateAdvancedMetrics = (): void => {
   // 更新 GPU 内存（估算）
   if (appManager && appManager.renderer) {
     const gpuMemoryMB = Math.round(
-      (particleConfig.count * 4 * 4 + // 位置纹理 (RGBA * 4 bytes)
-      particleConfig.count * 4 * 4 + // 速度纹理 (RGBA * 4 bytes)
-      particleConfig.count * 3 * 4) / // 颜色数据 (RGB * 4 bytes)
+      (particleConfig.particleCount * 4 * 4 + // 位置纹理 (RGBA * 4 bytes)
+      particleConfig.particleCount * 4 * 4 + // 速度纹理 (RGBA * 4 bytes)
+      particleConfig.particleCount * 3 * 4) / // 颜色数据 (RGB * 4 bytes)
       1024 / 1024
     )
     perfMetrics.gpuMemory = gpuMemoryMB
@@ -558,11 +558,11 @@ onMounted(() => {
   try {
     // 初始化应用配置
     const config = {
-      particleCount: 40000,    // 粒子数量
-      particleSize: 1.0,        // 粒子大小
-      boundsRadius: 60,         // 边界半径
-      velocityScale: 0.1,       // 速度缩放因子
-      maxSpeed: 0.18,           // 最大速度限制
+      particleCount: particleConfig.particleCount,    // 粒子数量
+      particleSize: particleConfig.particleSize,        // 粒子大小
+      boundsRadius: particleConfig.boundsRadius,         // 边界半径
+      velocityScale: particleConfig.velocityScale,       // 速度缩放因子
+      maxSpeed: particleConfig.maxSpeed,           // 最大速度限制
       enableTrails: true,       // 启用粒子轨迹
       trailConfig: {            // 轨迹配置
         length: 8,              // 轨迹长度（历史位置数量）

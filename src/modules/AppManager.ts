@@ -877,7 +877,7 @@ export class AppManager {
             enableTrails: this.savedConfig?.enableTrails || false,
             trailConfig: this.savedConfig?.trailConfig
           }
-          this.particleSystem = new ParticleSystem(this.renderer.scene, particleConfig, this.noiseTexture)
+          this.particleSystem = new ParticleSystem(this.renderer.scene, particleConfig, this.noiseTexture, true)
         }
       } else {
         // 更新其他参数 - 无需重建
