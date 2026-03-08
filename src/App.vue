@@ -1,13 +1,14 @@
 <template>
-  <div ref="container" class="particle-container">
-    <!-- 加载指示器 -->
-    <transition name="loader-fade">
-      <div v-if="isLoading" class="loader">
-        <div class="loader-ring"></div>
-      </div>
-    </transition>
-    
-    <canvas ref="canvas"></canvas>
+  <ErrorBoundary>
+    <div ref="container" class="particle-container">
+      <!-- 加载指示器 -->
+      <transition name="loader-fade">
+        <div v-if="isLoading" class="loader">
+          <div class="loader-ring"></div>
+        </div>
+      </transition>
+      
+      <canvas ref="canvas"></canvas>
 
     <!-- 设置按钮（齿轮图标） -->
     <button class="settings-button" @click="openDashboard" title="打开设置">
@@ -44,6 +45,14 @@
                   <span class="performance-value">{{ perfMetrics.frameTime.toFixed(1) }} ms</span>
                 </div>
                 <div class="performance-item">
+                  <span class="performance-label">内存</span>
+                  <span class="performance-value">{{ perfMetrics.memoryText }}</span>
+                </div>
+                <div class="performance-item">
+                  <span class="performance-label">GPU 内存</span>
+                  <span class="performance-value">{{ perfMetrics.gpuMemoryText }}</span>
+                </div>
+                <div class="performance-item">
                   <span class="performance-label">粒子数量</span>
                   <span class="performance-value">{{ particleConfig.count.toLocaleString() }}</span>
                 </div>
@@ -58,6 +67,10 @@
                   <span class="performance-value mode-badge" :class="perfMetrics.computeMode">
                     {{ perfMetrics.computeModeText }}
                   </span>
+                </div>
+                <div class="performance-item">
+                  <span class="performance-label">Draw Calls</span>
+                  <span class="performance-value">{{ perfMetrics.drawCalls }}</span>
                 </div>
               </div>
 
@@ -185,18 +198,38 @@
           </div>
 
           <div class="dashboard-footer">
+            <div class="footer-buttons">
+              <button class="footer-button export-button" @click="exportConfig">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                  <polyline points="7 10 12 15 17 10"></polyline>
+                  <line x1="12" y1="15" x2="12" y2="3"></line>
+                </svg>
+                导出配置
+              </button>
+              <button class="footer-button import-button" @click="importConfig">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                  <polyline points="17 8 12 3 7 8"></polyline>
+                  <line x1="12" y1="3" x2="12" y2="15"></line>
+                </svg>
+                导入配置
+              </button>
+            </div>
             <button class="reset-button" @click="resetConfig">重置参数</button>
           </div>
         </div>
       </div>
     </transition>
   </div>
+  </ErrorBoundary>
 </template>
 
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, reactive, computed } from 'vue'
 import { AppManager, ParticleComputeMode } from './modules/AppManager'
 import { PRESET_THEMES } from './modules/colors/presets'
+import ErrorBoundary from './components/ErrorBoundary.vue'
 import type { ColorTheme } from './modules/colors/ColorTheme'
 
 /**
@@ -253,7 +286,13 @@ const perfMetrics = reactive({
   status: 'good',
   statusText: '流畅',
   computeMode: ParticleComputeMode.CPU,
-  computeModeText: 'CPU'
+  computeModeText: 'CPU',
+  memory: 0,
+  memoryText: '0 MB',
+  gpuMemory: 0,
+  gpuMemoryText: '0 MB',
+  drawCalls: 0,
+  triangles: 0
 })
 
 /**
@@ -358,6 +397,118 @@ const resetConfig = (): void => {
 }
 
 /**
+ * 更新高级性能指标
+ * 包括内存使用、GPU 内存、渲染统计等
+ */
+const updateAdvancedMetrics = (): void => {
+  // 更新内存使用
+  if (performance.memory) {
+    const memoryMB = Math.round(performance.memory.usedJSHeapSize / 1024 / 1024)
+    perfMetrics.memory = memoryMB
+    perfMetrics.memoryText = `${memoryMB} MB`
+  } else {
+    perfMetrics.memory = 0
+    perfMetrics.memoryText = 'N/A'
+  }
+
+  // 更新 GPU 内存（估算）
+  if (appManager && appManager.renderer) {
+    const gpuMemoryMB = Math.round(
+      (particleConfig.count * 4 * 4 + // 位置纹理 (RGBA * 4 bytes)
+      particleConfig.count * 4 * 4 + // 速度纹理 (RGBA * 4 bytes)
+      particleConfig.count * 3 * 4) / // 颜色数据 (RGB * 4 bytes)
+      1024 / 1024
+    )
+    perfMetrics.gpuMemory = gpuMemoryMB
+    perfMetrics.gpuMemoryText = `${gpuMemoryMB} MB`
+  }
+
+  // 更新渲染统计
+  if (appManager && appManager.renderer) {
+    perfMetrics.drawCalls = appManager.renderer.renderer.info.render.calls
+    perfMetrics.triangles = appManager.renderer.renderer.info.render.triangles
+  }
+}
+
+/**
+ * 导出配置
+ */
+const exportConfig = (): void => {
+  try {
+    if (!appManager) {
+      console.error('[App.vue] 导出配置失败: AppManager 未初始化')
+      alert('导出配置失败: AppManager 未初始化')
+      return
+    }
+
+    const configJson = appManager.exportConfig()
+    
+    // 创建并下载配置文件
+    const blob = new Blob([configJson], { type: 'application/json' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `xingchen-config-${new Date().toISOString().slice(0, 10)}.json`
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
+
+    console.log('[App.vue] 配置导出成功')
+    alert('配置导出成功！')
+  } catch (error) {
+    console.error('[App.vue] 导出配置失败:', error)
+    alert(`导出配置失败: ${error instanceof Error ? error.message : String(error)}`)
+  }
+}
+
+/**
+ * 导入配置
+ */
+const importConfig = (): void => {
+  try {
+    const input = document.createElement('input')
+    input.type = 'file'
+    input.accept = 'application/json'
+    
+    input.onchange = async (event) => {
+      const file = (event.target as HTMLInputElement).files?.[0]
+      if (!file) {
+        return
+      }
+
+      try {
+        const text = await file.text()
+        
+        if (!appManager) {
+          console.error('[App.vue] 导入配置失败: AppManager 未初始化')
+          alert('导入配置失败: AppManager 未初始化')
+          return
+        }
+
+        const success = appManager.importConfig(text)
+        
+        if (success) {
+          console.log('[App.vue] 配置导入成功')
+          alert('配置导入成功！')
+        } else {
+          console.error('[App.vue] 配置导入失败')
+          alert('配置导入失败！请检查配置文件格式。')
+        }
+      } catch (error) {
+        console.error('[App.vue] 读取配置文件失败:', error)
+        alert(`读取配置文件失败: ${error instanceof Error ? error.message : String(error)}`)
+      }
+    }
+    
+    input.click()
+  } catch (error) {
+    console.error('[App.vue] 导入配置失败:', error)
+    alert(`导入配置失败: ${error instanceof Error ? error.message : String(error)}`)
+  }
+}
+
+/**
  * 切换计算模式
  */
 const toggleComputeMode = async (): Promise<void> => {
@@ -443,7 +594,7 @@ onMounted(() => {
       container.value.addEventListener('touchend', handleClick)
     }
 
-    // 设置性能监控回调
+// 设置性能监控回调
     if (appManager) {
       appManager.setPerformanceCallback((fps, frameTime) => {
         perfMetrics.fps = fps
@@ -460,6 +611,9 @@ onMounted(() => {
           perfMetrics.status = 'poor'
           perfMetrics.statusText = '卡顿'
         }
+
+        // 更新内存和 GPU 信息
+        updateAdvancedMetrics()
       })
 
       // 获取计算模式信息
@@ -467,6 +621,14 @@ onMounted(() => {
       perfMetrics.computeModeText = perfMetrics.computeMode === ParticleComputeMode.GPU ? 'GPU' : 'CPU'
       supportsGPGPU.value = appManager.isGPGPUSupported()
     }
+
+    // 启动性能监控定时器（每 2 秒更新一次）
+    const metricsInterval = setInterval(updateAdvancedMetrics, 2000)
+
+    // 在组件卸载时清理定时器
+    onUnmounted(() => {
+      clearInterval(metricsInterval)
+    })
 
     console.log('[App.vue] 应用初始化完成')
   } catch (error) {
@@ -1195,6 +1357,70 @@ canvas {
   padding: 20px 28px;
   border-top: 1px solid rgba(255, 255, 255, 0.1);
   background: rgba(0, 0, 0, 0.1);
+}
+
+/**
+ * 底部按钮容器
+ */
+.footer-buttons {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+/**
+ * 底部按钮（导出/导入）
+ */
+.footer-button {
+  flex: 1;
+  padding: 12px 16px;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 10px;
+  color: rgba(255, 255, 255, 0.9);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  letter-spacing: 0.2px;
+}
+
+.footer-button:hover {
+  background: rgba(255, 255, 255, 0.2);
+  border-color: rgba(255, 255, 255, 0.3);
+  color: #ffffff;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+}
+
+.footer-button:active {
+  transform: translateY(0);
+}
+
+.footer-button svg {
+  flex-shrink: 0;
+}
+
+/**
+ * 导出按钮
+ */
+.export-button:hover {
+  box-shadow: 
+    0 4px 12px rgba(0, 0, 0, 0.2),
+    0 0 0 1px rgba(16, 185, 129, 0.3);
+}
+
+/**
+ * 导入按钮
+ */
+.import-button:hover {
+  box-shadow: 
+    0 4px 12px rgba(0, 0, 0, 0.2),
+    0 0 0 1px rgba(59, 130, 246, 0.3);
 }
 
 /**

@@ -243,6 +243,10 @@ export class GPGUParticleSystem {
   private time: number = 0
   /** 粒子位置数组（用于读取 GPU 结果） */
   private positions: Float32Array | null = null
+  /** 首次渲染标记 */
+  private firstRender: boolean = true
+  /** 更新计数器（用于调试） */
+  private updateCount: number = 0
 
   /**
    * 构造函数
@@ -303,19 +307,44 @@ export class GPGUParticleSystem {
     // 初始化 GPU 计算渲染器
     this.gpgpu.init()
 
-    // 执行一次初始计算，确保渲染目标正确初始化
+    // 执行两次初始计算，确保渲染目标正确初始化
+    // 第一次：将初始数据写入渲染目标
     this.gpgpu.compute()
-    console.log('[GPGUParticleSystem] 初始 GPU 计算已完成')
+    console.log('[GPGUParticleSystem] 第一次 GPU 计算已完成')
+
+    // 第二次：从第一个渲染目标读取数据并写入第二个
+    this.gpgpu.compute()
+    console.log('[GPGUParticleSystem] 第二次 GPU 计算已完成')
 
     // 创建粒子系统
     this.points = this.create(textureWidth, textureHeight)
     scene.add(this.points)
 
-    // 初始化：设置初始位置纹理到渲染材质
+    // 初始化：设置位置纹理到渲染材质
     if (this.positionVariable && this.points.material instanceof THREE.ShaderMaterial) {
       const positionTarget = this.gpgpu.getCurrentRenderTarget(this.positionVariable)
-      this.points.material.uniforms.tPosition.value = positionTarget.texture
-      console.log('[GPGUParticleSystem] 初始位置纹理已设置')
+      const texture = positionTarget.texture
+
+      // 确保纹理正确配置
+      texture.minFilter = THREE.NearestFilter
+      texture.magFilter = THREE.NearestFilter
+      texture.wrapS = THREE.ClampToEdgeWrapping
+      texture.wrapT = THREE.ClampToEdgeWrapping
+      texture.needsUpdate = true
+
+      this.points.material.uniforms.tPosition.value = texture
+
+      // 强制标记材质需要更新，触发重新编译
+      this.points.material.needsUpdate = true
+
+      // 验证纹理数据
+      console.log('[GPGUParticleSystem] 初始位置纹理已设置', {
+        textureWidth: texture.image.width,
+        textureHeight: texture.image.height,
+        uniformValue: this.points.material.uniforms.tPosition.value !== null,
+        uniformName: Object.keys(this.points.material.uniforms)[0],
+        materialNeedsUpdate: this.points.material.needsUpdate
+      })
     }
 
     // 如果使用默认颜色，创建颜色管理器并初始化
@@ -434,10 +463,11 @@ export class GPGUParticleSystem {
       const i3 = i * 3
       const i2 = i * 2
 
-      // 位置（占位符，将从 GPU 纹理读取）
-      positions[i3] = 0
-      positions[i3 + 1] = 0
-      positions[i3 + 2] = 0
+      // 位置（占位符，设置为非零值，确保几何体有效）
+      // 虽然最终从 GPU 纹理读取位置，但 Three.js 需要有效的几何体数据
+      positions[i3] = (Math.random() - 0.5) * 0.01
+      positions[i3 + 1] = (Math.random() - 0.5) * 0.01
+      positions[i3 + 2] = (Math.random() - 0.5) * 0.01
 
       // 颜色（白色占位符，稍后由 ColorManager 替换）
       colors[i3] = 1.0
@@ -457,23 +487,51 @@ export class GPGUParticleSystem {
     geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3))
     geometry.setAttribute('uv', new THREE.BufferAttribute(uvs, 2))
 
+    // 创建一个临时纹理作为初始值（稍后会被替换）
+    const tempTexture = new THREE.DataTexture(
+      new Float32Array(width * height * 4),
+      width,
+      height,
+      THREE.RGBAFormat,
+      THREE.FloatType
+    )
+    tempTexture.minFilter = THREE.NearestFilter
+    tempTexture.magFilter = THREE.NearestFilter
+    tempTexture.needsUpdate = true
+
     // 创建材质（使用自定义着色器从纹理读取位置）
     const material = new THREE.ShaderMaterial({
       uniforms: {
-        tPosition: { value: null },
-        uSize: { value: this.config.size }
+        tPosition: { value: tempTexture },
+        uSize: { value: this.config.size },
+        uTextureSize: { value: new THREE.Vector2(width, height) }
       },
       vertexShader: `
         uniform sampler2D tPosition;
         uniform float uSize;
+        uniform vec2 uTextureSize;
         attribute vec3 color;
         varying vec3 vColor;
 
         void main() {
           vColor = color;
-          vec4 pos = texture2D(tPosition, uv);
-          vec4 mvPosition = modelViewMatrix * vec4(pos.rgb, 1.0);
+
+          // 从纹理读取位置
+          vec4 posData = texture2D(tPosition, uv);
+          
+          // 检查位置数据是否有效
+          if (length(posData.rgb) < 0.001) {
+            // 如果位置数据无效，跳过这个粒子
+            gl_Position = vec4(0.0);
+            gl_PointSize = 0.0;
+            return;
+          }
+
+          vec4 mvPosition = modelViewMatrix * vec4(posData.rgb, 1.0);
+          
+          // 计算点大小，随距离衰减
           gl_PointSize = uSize * (300.0 / -mvPosition.z);
+          
           gl_Position = projectionMatrix * mvPosition;
         }
       `,
@@ -498,12 +556,13 @@ export class GPGUParticleSystem {
     console.log('[GPGUParticleSystem] 几何体信息:', {
       vertexCount: geometry.attributes.position.count,
       uvCount: geometry.attributes.uv.count,
-      colorCount: geometry.attributes.color.count
+      colorCount: geometry.attributes.color.count,
+      positionBounds: {
+        min: new THREE.Vector3().fromArray(positions.slice(0, 3)),
+        max: new THREE.Vector3().fromArray(positions.slice(-3))
+      }
     })
     return points
-
-    this.positions = positions
-    return new THREE.Points(geometry, material)
   }
 
   /**
@@ -548,9 +607,36 @@ export class GPGUParticleSystem {
         // 确保纹理正确配置用于渲染
         texture.minFilter = THREE.NearestFilter
         texture.magFilter = THREE.NearestFilter
+        texture.wrapS = THREE.ClampToEdgeWrapping
+        texture.wrapT = THREE.ClampToEdgeWrapping
         texture.needsUpdate = true
 
         this.points.material.uniforms.tPosition.value = texture
+        
+        // 强制标记材质需要更新
+        this.points.material.needsUpdate = true
+
+        // 首次更新时添加详细日志
+        if (!this.updateCount) {
+          this.updateCount = 1
+          console.log('[GPGUParticleSystem] 首次更新完成', {
+            texture: texture,
+            textureWidth: texture.image.width,
+            textureHeight: texture.image.height,
+            uniformValue: this.points.material.uniforms.tPosition.value !== null,
+            materialCompiled: this.points.material.vertexShader !== null
+          })
+        }
+
+        // 首次渲染时记录日志
+        if (this.firstRender) {
+          console.log('[GPGUParticleSystem] 首次渲染更新', {
+            hasTexture: texture !== null,
+            uniformSet: this.points.material.uniforms.tPosition.value !== null,
+            textureSize: { width: texture.image.width, height: texture.image.height }
+          })
+          this.firstRender = false
+        }
       }
 
       // 更新颜色（如果有颜色管理器）
