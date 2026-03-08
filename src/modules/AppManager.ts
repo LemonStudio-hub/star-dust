@@ -341,22 +341,22 @@ export class AppManager {
   private initializeInteractions(): void {
     // 鼠标交互
     this.mouseInteraction = new MouseInteraction(this.container, (x, y) => {
-      this.targetRotation.x = x
-      this.targetRotation.y = y
+      this.targetRotation.x += x
+      this.targetRotation.y += y
     })
 
     // 触摸交互
     this.touchInteraction = new TouchInteraction(this.container, (x, y) => {
-      this.targetRotation.x = x
-      this.targetRotation.y = y
+      this.targetRotation.x += x
+      this.targetRotation.y += y
     })
 
     // 手势交互
     this.gestureHandler = new GestureHandler(
       this.container,
       (x, y) => {
-        this.targetRotation.x = x
-        this.targetRotation.y = y
+        this.targetRotation.x += x
+        this.targetRotation.y += y
       },
       (scale) => {
         // 限制缩放范围在 [0.1, 10] 之间，防止指数增长

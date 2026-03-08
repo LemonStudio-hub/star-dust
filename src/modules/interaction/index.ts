@@ -39,42 +39,43 @@ function normalizeToRotation(
 /**
  * 鼠标交互处理器
  *
- * 监听鼠标移动事件，将鼠标位置转换为旋转角度。
+ * 监听鼠标移动事件，将鼠标移动转换为旋转增量。
  *
  * @class MouseInteraction
  */
 export class MouseInteraction {
   /** 容器元素 */
   private container: HTMLElement
-  /** 目标旋转角度 */
-  private targetRotation: THREE.Vector2
+  /** 上一次的鼠标位置 */
+  private lastPosition: { x: number; y: number } | null = null
   /** 旋转角度回调函数 */
   private callback: (x: number, y: number) => void
+  /** 移动灵敏度 */
+  private sensitivity: number = 0.005
 
   /**
    * 构造函数，初始化鼠标交互
-   * 
+   *
    * @param container - 容器元素
    * @param callback - 旋转角度变化时的回调函数
-   * 
+   *
    * @example
    * ```typescript
    * const mouseInteraction = new MouseInteraction(container, (x, y) => {
-   *   particleSystem.rotation.x = x;
-   *   particleSystem.rotation.y = y;
+   *   particleSystem.rotation.x += x;
+   *   particleSystem.rotation.y += y;
    * });
    * ```
    */
   constructor(container: HTMLElement, callback: (x: number, y: number) => void) {
     this.container = container
-    this.targetRotation = new THREE.Vector2()
     this.callback = callback
     this.setup()
   }
 
   /**
    * 设置事件监听器
-   * 
+   *
    * @private
    */
   private setup(): void {
@@ -84,105 +85,159 @@ export class MouseInteraction {
   /**
    * 处理鼠标移动事件
    *
-   * 将鼠标在容器中的位置转换为归一化坐标 [-1, 1]，
-   * 然后映射到旋转角度 [-π/2, π/2]。
-   * 只有当鼠标在容器内时才会触发。
+   * 计算鼠标移动的增量，并将增量作为旋转角度传递给回调函数。
+   * 这样可以实现平滑的旋转效果，而不是根据绝对位置跳转。
    *
    * @param event - 鼠标移动事件
    * @private
    */
   private handleMouseMove = (event: MouseEvent): void => {
-    const rotation = normalizeToRotation(event.clientX, event.clientY, this.container)
-    this.targetRotation.x = rotation.x
-    this.targetRotation.y = rotation.y
-    this.callback(rotation.x, rotation.y)
+    if (!this.lastPosition) {
+      this.lastPosition = { x: event.clientX, y: event.clientY }
+      return
+    }
+
+    // 计算移动增量
+    const deltaX = event.clientX - this.lastPosition.x
+    const deltaY = event.clientY - this.lastPosition.y
+
+    // 更新上一次的位置
+    this.lastPosition = { x: event.clientX, y: event.clientY }
+
+    // 将增量转换为旋转角度（Y 轴移动影响 X 轴旋转，X 轴移动影响 Y 轴旋转）
+    const rotationDeltaX = deltaY * this.sensitivity
+    const rotationDeltaY = deltaX * this.sensitivity
+
+    // 调用回调函数传递旋转增量
+    this.callback(rotationDeltaX, rotationDeltaY)
   }
 
   /**
    * 释放资源
-   * 
+   *
    * 移除事件监听器。
    */
   dispose(): void {
     this.container.removeEventListener('mousemove', this.handleMouseMove)
+    this.lastPosition = null
   }
 }
 
 /**
  * 触摸交互处理器
- * 
- * 监听触摸移动事件，将触摸位置转换为旋转角度。
- * 
+ *
+ * 监听触摸移动事件，将触摸移动转换为旋转增量。
+ *
  * @class TouchInteraction
  */
 export class TouchInteraction {
   /** 容器元素 */
   private container: HTMLElement
-  /** 目标旋转角度 */
-  private targetRotation: THREE.Vector2
+  /** 上一次的触摸位置 */
+  private lastPosition: { x: number; y: number } | null = null
   /** 旋转角度回调函数 */
   private callback: (x: number, y: number) => void
+  /** 移动灵敏度 */
+  private sensitivity: number = 0.005
 
   /**
    * 构造函数，初始化触摸交互
-   * 
+   *
    * @param container - 容器元素
    * @param callback - 旋转角度变化时的回调函数
-   * 
+   *
    * @example
    * ```typescript
    * const touchInteraction = new TouchInteraction(container, (x, y) => {
-   *   particleSystem.rotation.x = x;
-   *   particleSystem.rotation.y = y;
+   *   particleSystem.rotation.x += x;
+   *   particleSystem.rotation.y += y;
    * });
    * ```
    */
   constructor(container: HTMLElement, callback: (x: number, y: number) => void) {
     this.container = container
-    this.targetRotation = new THREE.Vector2()
     this.callback = callback
     this.setup()
   }
 
   /**
    * 设置事件监听器
-   * 
+   *
    * @private
    */
   private setup(): void {
     this.container.addEventListener('touchmove', this.handleTouchMove, { passive: true })
+    this.container.addEventListener('touchstart', this.handleTouchStart, { passive: true })
+    this.container.addEventListener('touchend', this.handleTouchEnd, { passive: true })
+  }
+
+  /**
+   * 处理触摸开始事件
+   *
+   * @param event - 触摸事件
+   * @private
+   */
+  private handleTouchStart = (event: TouchEvent): void => {
+    if (event.touches.length === 1) {
+      const touch = event.touches[0]
+      this.lastPosition = { x: touch.clientX, y: touch.clientY }
+    }
+  }
+
+  /**
+   * 处理触摸结束事件
+   *
+   * @param event - 触摸事件
+   * @private
+   */
+  private handleTouchEnd = (event: TouchEvent): void => {
+    if (event.touches.length === 0) {
+      this.lastPosition = null
+    }
   }
 
   /**
    * 处理触摸移动事件
    *
-   * 将触摸点在容器中的位置转换为归一化坐标 [-1, 1]，
-   * 然后映射到旋转角度 [-π/2, π/2]。
-   * 只有当触摸在容器内时才会触发。
+   * 计算触摸移动的增量，并将增量作为旋转角度传递给回调函数。
+   * 只有单指滑动时才会触发旋转，多指手势由 GestureHandler 处理。
    *
    * @param event - 触摸移动事件
    * @private
    */
   private handleTouchMove = (event: TouchEvent): void => {
-    // 检查是否有触摸点
-    if (event.touches.length === 0) {
+    // 只处理单指滑动
+    if (event.touches.length !== 1 || !this.lastPosition) {
       return
     }
 
     const touch = event.touches[0]
-    const rotation = normalizeToRotation(touch.clientX, touch.clientY, this.container)
-    this.targetRotation.x = rotation.x
-    this.targetRotation.y = rotation.y
-    this.callback(rotation.x, rotation.y)
+
+    // 计算移动增量
+    const deltaX = touch.clientX - this.lastPosition.x
+    const deltaY = touch.clientY - this.lastPosition.y
+
+    // 更新上一次的位置
+    this.lastPosition = { x: touch.clientX, y: touch.clientY }
+
+    // 将增量转换为旋转角度（Y 轴移动影响 X 轴旋转，X 轴移动影响 Y 轴旋转）
+    const rotationDeltaX = deltaY * this.sensitivity
+    const rotationDeltaY = deltaX * this.sensitivity
+
+    // 调用回调函数传递旋转增量
+    this.callback(rotationDeltaX, rotationDeltaY)
   }
 
   /**
    * 释放资源
-   * 
+   *
    * 移除事件监听器。
    */
   dispose(): void {
     this.container.removeEventListener('touchmove', this.handleTouchMove)
+    this.container.removeEventListener('touchstart', this.handleTouchStart)
+    this.container.removeEventListener('touchend', this.handleTouchEnd)
+    this.lastPosition = null
   }
 }
 
