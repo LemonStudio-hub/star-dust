@@ -24,7 +24,6 @@ uniform sampler2D tPosition;
 uniform sampler2D tVelocity;
 uniform sampler2D tNoise;
 uniform float uTime;
-uniform float uDeltaTime;
 uniform float uVelocityScale;
 uniform float uMaxSpeed;
 uniform float uBoundsRadius;
@@ -74,22 +73,30 @@ void main() {
 
   vec3 curl = curlNoise(pos, uTime);
 
-  vel += curl * uVelocityScale * uDeltaTime;
+  // 更新速度（不使用 deltaTime，与 CPU 模式保持一致）
+  vel += curl * uVelocityScale;
 
+  // 限制最大速度
   float speed = length(vel);
   if (speed > uMaxSpeed) {
     vel = normalize(vel) * uMaxSpeed;
   }
 
-  pos += vel * uDeltaTime;
+  // 更新位置（不使用 deltaTime，与 CPU 模式保持一致）
+  pos += vel;
 
+  // 边界检测
   float dist = length(pos);
   if (dist > uBoundsRadius) {
+    // 重置到中心附近
     pos *= 0.1;
 
-    float angle = random(vUv) * 6.28318;
-    float newSpeed = 0.01 + random(vUv + 0.1) * 0.03;
-    vel = vec3(cos(angle), sin(angle), (random(vUv + 0.2) - 0.5)) * newSpeed;
+    // 重置速度（与 CPU 模式保持一致：均匀随机分布，0.05 大小）
+    vel = vec3(
+      (random(vUv) - 0.5) * 0.05,
+      (random(vUv + 0.1) - 0.5) * 0.05,
+      (random(vUv + 0.2) - 0.5) * 0.05
+    );
   }
 
   gl_FragColor = vec4(pos, 1.0);
@@ -101,7 +108,6 @@ uniform sampler2D tPosition;
 uniform sampler2D tVelocity;
 uniform sampler2D tNoise;
 uniform float uTime;
-uniform float uDeltaTime;
 uniform float uVelocityScale;
 uniform float uMaxSpeed;
 uniform float uNoiseScale;
@@ -150,8 +156,10 @@ void main() {
 
   vec3 curl = curlNoise(pos, uTime);
 
-  vel += curl * uVelocityScale * uDeltaTime;
+  // 更新速度（不使用 deltaTime，与 CPU 模式保持一致）
+  vel += curl * uVelocityScale;
 
+  // 限制最大速度
   float speed = length(vel);
   if (speed > uMaxSpeed) {
     vel = normalize(vel) * uMaxSpeed;
@@ -501,18 +509,15 @@ export class GPGUParticleSystem {
 
     try {
       this.time = time
-      const deltaTimeSeconds = deltaTime / 1000.0
 
-      // 更新 uniforms
+      // 更新 uniforms（只更新时间，不使用 deltaTime）
       if (this.positionVariable && this.velocityVariable) {
         this.positionVariable.material.uniforms.uTime.value = time
-        this.positionVariable.material.uniforms.uDeltaTime.value = deltaTimeSeconds
         this.velocityVariable.material.uniforms.uTime.value = time
-        this.velocityVariable.material.uniforms.uDeltaTime.value = deltaTimeSeconds
       }
 
       // 执行 GPU 计算
-      this.gpgpu.compute(deltaTimeSeconds)
+      this.gpgpu.compute()
 
       // 更新位置纹理到渲染材质
       if (this.positionVariable && this.points.material instanceof THREE.ShaderMaterial) {
