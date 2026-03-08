@@ -53,6 +53,24 @@
                     {{ perfMetrics.statusText }}
                   </span>
                 </div>
+                <div class="performance-item">
+                  <span class="performance-label">计算模式</span>
+                  <span class="performance-value mode-badge" :class="perfMetrics.computeMode">
+                    {{ perfMetrics.computeModeText }}
+                  </span>
+                </div>
+              </div>
+
+              <!-- 模式切换按钮 -->
+              <div class="mode-switch-container" v-if="supportsGPGPU">
+                <button
+                  class="mode-switch-button"
+                  @click="toggleComputeMode"
+                  :disabled="isSwitchingMode"
+                >
+                  <span v-if="!isSwitchingMode">{{ getModeButtonText }}</span>
+                  <span v-else>切换中...</span>
+                </button>
               </div>
             </div>
 
@@ -177,7 +195,7 @@
 
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, reactive, computed } from 'vue'
-import { AppManager } from './modules/AppManager'
+import { AppManager, ParticleComputeMode } from './modules/AppManager'
 import { PRESET_THEMES } from './modules/colors/presets'
 import type { ColorTheme } from './modules/colors/ColorTheme'
 
@@ -233,8 +251,20 @@ const perfMetrics = reactive({
   fps: 60,
   frameTime: 16.67,
   status: 'good',
-  statusText: '流畅'
+  statusText: '流畅',
+  computeMode: ParticleComputeMode.CPU,
+  computeModeText: 'CPU'
 })
+
+/**
+ * 是否支持 GPGPU
+ */
+const supportsGPGPU = ref(false)
+
+/**
+ * 是否正在切换模式
+ */
+const isSwitchingMode = ref(false)
 
 /**
  * FPS 状态类名
@@ -328,6 +358,41 @@ const resetConfig = (): void => {
 }
 
 /**
+ * 切换计算模式
+ */
+const toggleComputeMode = async (): Promise<void> => {
+  if (isSwitchingMode.value || !appManager) {
+    return
+  }
+
+  const currentMode = appManager.getComputeMode()
+  const targetMode = currentMode === ParticleComputeMode.CPU
+    ? ParticleComputeMode.GPU
+    : ParticleComputeMode.CPU
+
+  isSwitchingMode.value = true
+
+  try {
+    const success = await appManager.switchComputeMode(targetMode)
+    if (success) {
+      perfMetrics.computeMode = targetMode
+      perfMetrics.computeModeText = targetMode === ParticleComputeMode.GPU ? 'GPU' : 'CPU'
+    }
+  } catch (error) {
+    console.error('切换计算模式失败:', error)
+  } finally {
+    isSwitchingMode.value = false
+  }
+}
+
+/**
+ * 获取模式按钮文本
+ */
+const getModeButtonText = computed(() => {
+  return perfMetrics.computeMode === ParticleComputeMode.CPU ? '切换到 GPU' : '切换到 CPU'
+})
+
+/**
  * 组件挂载时的初始化
  *
  * 创建并初始化应用管理器，启动 3D 粒子动画。
@@ -396,6 +461,11 @@ onMounted(() => {
           perfMetrics.statusText = '卡顿'
         }
       })
+
+      // 获取计算模式信息
+      perfMetrics.computeMode = appManager.getComputeMode()
+      perfMetrics.computeModeText = perfMetrics.computeMode === ParticleComputeMode.GPU ? 'GPU' : 'CPU'
+      supportsGPGPU.value = appManager.isGPGPUSupported()
     }
 
     console.log('[App.vue] 应用初始化完成')
@@ -801,6 +871,77 @@ canvas {
 .status-badge.poor {
   background: rgba(239, 68, 68, 0.2);
   color: #ef4444;
+}
+
+/**
+ * 模式徽章
+ */
+.mode-badge {
+  font-size: 14px;
+  padding: 2px 8px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.1);
+  font-weight: 600;
+}
+
+.mode-badge.CPU {
+  background: rgba(99, 102, 241, 0.2);
+  color: #6366f1;
+}
+
+.mode-badge.GPU {
+  background: rgba(16, 185, 129, 0.2);
+  color: #10b981;
+}
+
+/**
+ * 模式切换容器
+ */
+.mode-switch-container {
+  margin-top: 16px;
+  display: flex;
+  justify-content: center;
+}
+
+/**
+ * 模式切换按钮
+ */
+.mode-switch-button {
+  width: 100%;
+  padding: 10px 20px;
+  background: linear-gradient(
+    135deg,
+    rgba(99, 102, 241, 0.6) 0%,
+    rgba(168, 85, 247, 0.6) 50%,
+    rgba(236, 72, 153, 0.6) 100%
+  );
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 10px;
+  color: #ffffff;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  letter-spacing: 0.2px;
+}
+
+.mode-switch-button:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow:
+    0 6px 16px rgba(99, 102, 241, 0.3),
+    0 0 0 1px rgba(255, 255, 255, 0.3);
+}
+
+.mode-switch-button:active:not(:disabled) {
+  transform: translateY(0);
+  box-shadow:
+    0 3px 8px rgba(99, 102, 241, 0.2),
+    0 0 0 1px rgba(255, 255, 255, 0.2);
+}
+
+.mode-switch-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 /**

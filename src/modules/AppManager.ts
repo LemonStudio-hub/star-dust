@@ -10,10 +10,23 @@
 import * as THREE from 'three'
 import { NoiseTexture } from './noise/NoiseTexture'
 import { ParticleSystem, ParticleConfig } from './particles/ParticleSystem'
+import { GPGUParticleSystem, GPGUParticleConfig } from './particles/GPGUParticleSystem'
 import { TrailConfig } from './particles/TrailManager'
 import { MouseInteraction, TouchInteraction, GestureHandler } from './interaction'
 import { Renderer, RendererConfig } from './renderer/Renderer'
 import { ColorManager, ColorTheme } from './colors/ColorTheme'
+
+/**
+ * 粒子计算模式
+ *
+ * @enum {string}
+ */
+export enum ParticleComputeMode {
+  /** CPU 模式 */
+  CPU = 'cpu',
+  /** GPU 模式 */
+  GPU = 'gpu'
+}
 
 /**
  * 应用配置接口
@@ -35,6 +48,8 @@ export interface AppConfig {
   enableTrails?: boolean
   /** 轨迹配置（仅当 enableTrails 为 true 时生效） */
   trailConfig?: TrailConfig
+  /** 是否使用 GPGPU 模式（自动检测，默认自动） */
+  useGPGPU?: boolean | 'auto'
 }
 
 /**
@@ -76,8 +91,8 @@ const VALIDATION_RULES: Record<keyof AppConfig, ValidationRule> = {
 export class AppManager {
   /** 噪声纹理 */
   private noiseTexture: NoiseTexture
-  /** 粒子系统 */
-  private particleSystem: ParticleSystem
+  /** 粒子系统（CPU 或 GPU） */
+  private particleSystem: ParticleSystem | GPGUParticleSystem
   /** 鼠标交互 */
   private mouseInteraction: MouseInteraction
   /** 触摸交互 */
@@ -90,6 +105,10 @@ export class AppManager {
   private container: HTMLElement
   /** Canvas 元素 */
   private canvas: HTMLCanvasElement
+  /** 当前计算模式 */
+  private computeMode: ParticleComputeMode
+  /** 是否支持 GPGPU */
+  private supportsGPGPU: boolean
 
   /** 目标旋转角度 */
   private targetRotation: THREE.Vector2
@@ -144,6 +163,14 @@ export class AppManager {
       this.currentRotation = new THREE.Vector2()
       this.time = 0
 
+      // 检测 GPGPU 支持
+      this.supportsGPGPU = this.detectGPGPUSupport()
+      console.log(`GPGPU 支持: ${this.supportsGPGPU ? '是' : '否'}`)
+
+      // 确定计算模式
+      this.computeMode = this.determineComputeMode(config.useGPGPU)
+      console.log(`使用计算模式: ${this.computeMode.toUpperCase()}`)
+
       this.initialize(config)
       this.setupContextHandlers()
     } catch (error) {
@@ -154,18 +181,22 @@ export class AppManager {
 
   /**
    * 验证配置参数
-   * 
+   *
    * 检查所有配置参数是否在有效范围内。
    * 如果参数超出范围，会抛出错误。
-   * 
+   *
    * @param config - 待验证的配置参数
    * @throws {Error} 当配置参数无效时抛出错误
    * @private
    */
   private validateConfig(config: AppConfig): void {
     for (const [key, value] of Object.entries(config)) {
+      if (key === 'useGPGPU' || key === 'enableTrails' || key === 'trailConfig') {
+        continue
+      }
+
       const rule = VALIDATION_RULES[key as keyof AppConfig]
-      
+
       if (!rule) {
         console.warn(`未知的配置参数: ${key}`)
         continue
@@ -180,6 +211,82 @@ export class AppManager {
           `${rule.name} 超出有效范围 [${rule.min}, ${rule.max}]，当前值: ${value}`
         )
       }
+    }
+  }
+
+  /**
+   * 检测 GPGPU 支持
+   *
+   * 检测浏览器是否支持 GPGPU 计算所需的特性。
+   *
+   * @returns 是否支持 GPGPU
+   * @private
+   */
+  private detectGPGPUSupport(): boolean {
+    try {
+      // 检查 WebGL 2.0 支持
+      const gl = this.canvas.getContext('webgl2')
+      if (!gl) {
+        console.warn('不支持 WebGL 2.0，无法使用 GPGPU 模式')
+        return false
+      }
+
+      // 检查浮点纹理支持
+      const ext = gl.getExtension('EXT_color_buffer_float')
+      if (!ext) {
+        console.warn('不支持 EXT_color_buffer_float 扩展，无法使用 GPGPU 模式')
+        return false
+      }
+
+      // 检查浮点纹理渲染支持
+      const fb = gl.createFramebuffer()
+      const tex = gl.createTexture()
+      gl.bindTexture(gl.TEXTURE_2D, tex)
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA32F, 1, 1, 0, gl.RGBA, gl.FLOAT, null)
+      gl.bindFramebuffer(gl.FRAMEBUFFER, fb)
+      gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, tex, 0)
+
+      const status = gl.checkFramebufferStatus(gl.FRAMEBUFFER)
+      gl.deleteFramebuffer(fb)
+      gl.deleteTexture(tex)
+
+      if (status !== gl.FRAMEBUFFER_COMPLETE) {
+        console.warn('不支持浮点纹理渲染，无法使用 GPGPU 模式')
+        return false
+      }
+
+      return true
+    } catch (error) {
+      console.warn('检测 GPGPU 支持时发生错误:', error)
+      return false
+    }
+  }
+
+  /**
+   * 确定计算模式
+   *
+   * 根据配置和浏览器支持情况确定使用哪种计算模式。
+   *
+   * @param useGPGPU - 是否使用 GPGPU
+   * @returns 计算模式
+   * @private
+   */
+  private determineComputeMode(useGPGPU?: boolean | 'auto'): ParticleComputeMode {
+    if (useGPGPU === true) {
+      if (!this.supportsGPGPU) {
+        console.warn('请求使用 GPGPU 模式，但浏览器不支持，回退到 CPU 模式')
+        return ParticleComputeMode.CPU
+      }
+      return ParticleComputeMode.GPU
+    } else if (useGPGPU === false) {
+      return ParticleComputeMode.CPU
+    } else {
+      // 自动模式：根据粒子数量决定
+      const particleCount = this.savedConfig?.particleCount || 30000
+      if (particleCount >= 50000 && this.supportsGPGPU) {
+        return ParticleComputeMode.GPU
+      }
+      return ParticleComputeMode.CPU
     }
   }
 
@@ -273,24 +380,45 @@ export class AppManager {
   private continueInitialization(config: AppConfig): void {
     try {
       // 步骤 3：创建粒子系统
-      console.log('创建粒子系统...')
-      const particleConfig: ParticleConfig = {
-        count: config.particleCount,
-        size: config.particleSize,
-        boundsRadius: config.boundsRadius,
-        velocityScale: config.velocityScale,
-        maxSpeed: config.maxSpeed,
-        enableTrails: config.enableTrails || false,
-        trailConfig: config.trailConfig
+      console.log(`创建粒子系统（${this.computeMode.toUpperCase()} 模式）...`)
+
+      if (this.computeMode === ParticleComputeMode.GPU) {
+        // GPGPU 模式
+        const gpgpuConfig: GPGUParticleConfig = {
+          count: config.particleCount,
+          size: config.particleSize,
+          boundsRadius: config.boundsRadius,
+          velocityScale: config.velocityScale,
+          maxSpeed: config.maxSpeed,
+          noiseScale: 0.008,
+          timeScale: 0.0001
+        }
+        this.particleSystem = new GPGUParticleSystem(
+          this.renderer.scene,
+          this.renderer.renderer,
+          gpgpuConfig,
+          this.noiseTexture,
+          true
+        )
+      } else {
+        // CPU 模式
+        const particleConfig: ParticleConfig = {
+          count: config.particleCount,
+          size: config.particleSize,
+          boundsRadius: config.boundsRadius,
+          velocityScale: config.velocityScale,
+          maxSpeed: config.maxSpeed,
+          enableTrails: config.enableTrails || false,
+          trailConfig: config.trailConfig
+        }
+        this.particleSystem = new ParticleSystem(this.renderer.scene, particleConfig, this.noiseTexture)
       }
-      this.particleSystem = new ParticleSystem(this.renderer.scene, particleConfig, this.noiseTexture)
 
       // 步骤 4：初始化交互系统
       console.log('初始化交互系统...')
       this.initializeInteractions()
-    
-          // 步骤 5：启动主循环
-          // 步骤 5：启动主循环
+
+      // 步骤 5：启动主循环
       console.log('启动应用...')
       this.lastFrameTime = performance.now()
       this.animate(this.lastFrameTime)
@@ -450,6 +578,106 @@ export class AppManager {
   }
 
   /**
+   * 获取当前计算模式
+   *
+   * @returns 当前计算模式（CPU 或 GPU）
+   */
+  getComputeMode(): ParticleComputeMode {
+    return this.computeMode
+  }
+
+  /**
+   * 检查是否支持 GPGPU
+   *
+   * @returns 是否支持 GPGPU
+   */
+  isGPGPUSupported(): boolean {
+    return this.supportsGPGPU
+  }
+
+  /**
+   * 切换计算模式
+   *
+   * 在 CPU 和 GPU 模式之间切换。
+   * 注意：此操作会重新初始化粒子系统。
+   *
+   * @param mode - 目标计算模式
+   * @returns 是否切换成功
+   */
+  async switchComputeMode(mode: ParticleComputeMode): Promise<boolean> {
+    try {
+      if (mode === this.computeMode) {
+        console.warn(`已经在 ${mode.toUpperCase()} 模式下`)
+        return false
+      }
+
+      if (mode === ParticleComputeMode.GPU && !this.supportsGPGPU) {
+        console.warn('不支持 GPGPU 模式，无法切换')
+        return false
+      }
+
+      console.log(`切换到 ${mode.toUpperCase()} 模式...`)
+
+      // 停止当前的渲染循环
+      cancelAnimationFrame(this.animationFrameId)
+
+      // 清理旧的粒子系统
+      this.particleSystem.dispose(this.renderer.scene)
+
+      // 更新计算模式
+      this.computeMode = mode
+
+      // 重新初始化粒子系统
+      if (!this.savedConfig) {
+        console.error('没有保存的配置，无法重新初始化')
+        return false
+      }
+
+      if (this.computeMode === ParticleComputeMode.GPU) {
+        // GPGPU 模式
+        const gpgpuConfig: GPGUParticleConfig = {
+          count: this.savedConfig.particleCount,
+          size: this.savedConfig.particleSize,
+          boundsRadius: this.savedConfig.boundsRadius,
+          velocityScale: this.savedConfig.velocityScale,
+          maxSpeed: this.savedConfig.maxSpeed,
+          noiseScale: 0.008,
+          timeScale: 0.0001
+        }
+        this.particleSystem = new GPGUParticleSystem(
+          this.renderer.scene,
+          this.renderer.renderer,
+          gpgpuConfig,
+          this.noiseTexture,
+          true
+        )
+      } else {
+        // CPU 模式
+        const particleConfig: ParticleConfig = {
+          count: this.savedConfig.particleCount,
+          size: this.savedConfig.particleSize,
+          boundsRadius: this.savedConfig.boundsRadius,
+          velocityScale: this.savedConfig.velocityScale,
+          maxSpeed: this.savedConfig.maxSpeed,
+          enableTrails: this.savedConfig.enableTrails || false,
+          trailConfig: this.savedConfig.trailConfig
+        }
+        this.particleSystem = new ParticleSystem(this.renderer.scene, particleConfig, this.noiseTexture)
+      }
+
+      // 重新启动渲染循环
+      this.lastFrameTime = performance.now()
+      this.animate(this.lastFrameTime)
+
+      console.log(`已切换到 ${mode.toUpperCase()} 模式`)
+      return true
+    } catch (error) {
+      console.error('切换计算模式失败:', error)
+      return false
+    }
+  }
+
+  /**
    * 切换颜色主题
    *
    * 快捷方法：直接切换颜色主题。
@@ -595,11 +823,11 @@ export class AppManager {
 
   /**
    * 更新粒子系统配置
-   * 
+   *
    * 动态更新粒子系统的参数，实现实时调整。
-   * 
+   *
    * @param config - 新的配置参数
-   * 
+   *
    * @example
    * ```typescript
    * appManager.updateConfig({
@@ -614,27 +842,60 @@ export class AppManager {
   updateConfig(config: AppConfig): void {
     try {
       // 更新粒子数量 - 需要重建粒子系统
-      if (config.particleCount !== undefined && config.particleCount !== this.particleSystem.getConfig().count) {
+      const currentCount = this.particleSystem.getConfig().count
+      if (config.particleCount !== undefined && config.particleCount !== currentCount) {
         console.log('更新粒子数量:', config.particleCount)
+
         // 清理旧的粒子系统
         this.particleSystem.dispose(this.renderer.scene)
+
         // 创建新的粒子系统
-        const particleConfig: ParticleConfig = {
-          count: config.particleCount,
-          size: config.particleSize,
-          boundsRadius: config.boundsRadius,
-          velocityScale: config.velocityScale,
-          maxSpeed: config.maxSpeed
+        if (this.computeMode === ParticleComputeMode.GPU) {
+          const gpgpuConfig: GPGUParticleConfig = {
+            count: config.particleCount,
+            size: config.particleSize,
+            boundsRadius: config.boundsRadius,
+            velocityScale: config.velocityScale,
+            maxSpeed: config.maxSpeed,
+            noiseScale: 0.008,
+            timeScale: 0.0001
+          }
+          this.particleSystem = new GPGUParticleSystem(
+            this.renderer.scene,
+            this.renderer.renderer,
+            gpgpuConfig,
+            this.noiseTexture,
+            true
+          )
+        } else {
+          const particleConfig: ParticleConfig = {
+            count: config.particleCount,
+            size: config.particleSize,
+            boundsRadius: config.boundsRadius,
+            velocityScale: config.velocityScale,
+            maxSpeed: config.maxSpeed,
+            enableTrails: this.savedConfig?.enableTrails || false,
+            trailConfig: this.savedConfig?.trailConfig
+          }
+          this.particleSystem = new ParticleSystem(this.renderer.scene, particleConfig, this.noiseTexture)
         }
-        this.particleSystem = new ParticleSystem(this.renderer.scene, particleConfig, this.noiseTexture)
       } else {
         // 更新其他参数 - 无需重建
-        this.particleSystem.updateConfig({
-          size: config.particleSize,
-          boundsRadius: config.boundsRadius,
-          velocityScale: config.velocityScale,
-          maxSpeed: config.maxSpeed
-        })
+        if (this.computeMode === ParticleComputeMode.GPU) {
+          this.particleSystem.updateConfig({
+            size: config.particleSize,
+            boundsRadius: config.boundsRadius,
+            velocityScale: config.velocityScale,
+            maxSpeed: config.maxSpeed
+          })
+        } else {
+          this.particleSystem.updateConfig({
+            size: config.particleSize,
+            boundsRadius: config.boundsRadius,
+            velocityScale: config.velocityScale,
+            maxSpeed: config.maxSpeed
+          })
+        }
       }
     } catch (error) {
       console.error('更新配置时发生错误:', error)
