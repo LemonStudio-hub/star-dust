@@ -303,9 +303,20 @@ export class GPGUParticleSystem {
     // 初始化 GPU 计算渲染器
     this.gpgpu.init()
 
+    // 执行一次初始计算，确保渲染目标正确初始化
+    this.gpgpu.compute()
+    console.log('[GPGUParticleSystem] 初始 GPU 计算已完成')
+
     // 创建粒子系统
     this.points = this.create(textureWidth, textureHeight)
     scene.add(this.points)
+
+    // 初始化：设置初始位置纹理到渲染材质
+    if (this.positionVariable && this.points.material instanceof THREE.ShaderMaterial) {
+      const positionTarget = this.gpgpu.getCurrentRenderTarget(this.positionVariable)
+      this.points.material.uniforms.tPosition.value = positionTarget.texture
+      console.log('[GPGUParticleSystem] 初始位置纹理已设置')
+    }
 
     // 如果使用默认颜色，创建颜色管理器并初始化
     if (useDefaultColor) {
@@ -434,8 +445,9 @@ export class GPGUParticleSystem {
       colors[i3 + 2] = 1.0
 
       // UV 坐标（用于从纹理读取位置）
-      const u = (i % width) / (width - 1)
-      const v = Math.floor(i / width) / (height - 1)
+      // 使用 texel center 采样，避免边缘采样问题
+      const u = (i % width + 0.5) / width
+      const v = (Math.floor(i / width) + 0.5) / height
       uvs[i2] = u
       uvs[i2 + 1] = v
     }
@@ -482,6 +494,15 @@ export class GPGUParticleSystem {
     })
 
     this.positions = positions
+    const points = new THREE.Points(geometry, material)
+    console.log('[GPGUParticleSystem] 几何体信息:', {
+      vertexCount: geometry.attributes.position.count,
+      uvCount: geometry.attributes.uv.count,
+      colorCount: geometry.attributes.color.count
+    })
+    return points
+
+    this.positions = positions
     return new THREE.Points(geometry, material)
   }
 
@@ -522,7 +543,14 @@ export class GPGUParticleSystem {
       // 更新位置纹理到渲染材质
       if (this.positionVariable && this.points.material instanceof THREE.ShaderMaterial) {
         const positionTarget = this.gpgpu.getCurrentRenderTarget(this.positionVariable)
-        this.points.material.uniforms.tPosition.value = positionTarget.texture
+        const texture = positionTarget.texture
+
+        // 确保纹理正确配置用于渲染
+        texture.minFilter = THREE.NearestFilter
+        texture.magFilter = THREE.NearestFilter
+        texture.needsUpdate = true
+
+        this.points.material.uniforms.tPosition.value = texture
       }
 
       // 更新颜色（如果有颜色管理器）
