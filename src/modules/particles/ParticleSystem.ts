@@ -115,6 +115,50 @@ export class ParticleSystem {
   }
 
   /**
+   * 创建圆形渐变纹理
+   *
+   * 生成一个柔和的圆形渐变纹理，用于粒子渲染。
+   * 中心最亮，边缘透明，产生柔和的发光效果。
+   *
+   * @returns Three.js Canvas 纹理
+   * @private
+   */
+  private createCircularTexture(): THREE.CanvasTexture {
+    const size = 128
+    const canvas = document.createElement('canvas')
+    canvas.width = size
+    canvas.height = size
+    const ctx = canvas.getContext('2d')
+
+    if (!ctx) {
+      throw new Error('无法创建 Canvas 2D 上下文')
+    }
+
+    // 创建径向渐变
+    const centerX = size / 2
+    const centerY = size / 2
+    const radius = size / 2
+
+    // 渐变：从中心的白色到边缘的透明
+    const gradient = ctx.createRadialGradient(centerX, centerY, 0, centerX, centerY, radius)
+    gradient.addColorStop(0, 'rgba(255, 255, 255, 1)')     // 中心：完全不透明
+    gradient.addColorStop(0.3, 'rgba(255, 255, 255, 0.8)')  // 30%：80% 透明度
+    gradient.addColorStop(0.6, 'rgba(255, 255, 255, 0.4)')  // 60%：40% 透明度
+    gradient.addColorStop(0.85, 'rgba(255, 255, 255, 0.1)') // 85%：10% 透明度
+    gradient.addColorStop(1, 'rgba(255, 255, 255, 0)')      // 边缘：完全透明
+
+    // 绘制渐变圆
+    ctx.fillStyle = gradient
+    ctx.fillRect(0, 0, size, size)
+
+    // 创建纹理
+    const texture = new THREE.CanvasTexture(canvas)
+    texture.needsUpdate = true
+
+    return texture
+  }
+
+  /**
    * 创建粒子系统
    *
    * 初始化粒子的位置、速度和颜色。
@@ -166,6 +210,9 @@ export class ParticleSystem {
       this.initializeDefaultColors()
     }
 
+    // 创建圆形渐变纹理
+    const particleTexture = this.createCircularTexture()
+
     // 创建材质
     const material = new THREE.PointsMaterial({
       size: this.config.size,
@@ -175,7 +222,9 @@ export class ParticleSystem {
       sizeAttenuation: true,  // 启用透视大小衰减
       blending: THREE.AdditiveBlending,  // 加法混合，产生发光效果
       depthWrite: false,
-      depthTest: true
+      depthTest: true,
+      map: particleTexture,  // 使用圆形渐变纹理
+      alphaMap: particleTexture  // 使用相同的纹理作为透明度贴图
     })
 
     return new THREE.Points(geometry, material)
