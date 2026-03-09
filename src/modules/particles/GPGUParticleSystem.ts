@@ -189,6 +189,12 @@ export interface GPGUParticleConfig {
   noiseScale: number
   /** 时间缩放 */
   timeScale: number
+  /** 是否启用呼吸效果 */
+  enableBreathing?: boolean
+  /** 呼吸效果的振幅（0-1） */
+  breathingAmplitude?: number
+  /** 呼吸效果的频率（Hz） */
+  breathingFrequency?: number
 }
 
 /**
@@ -247,6 +253,12 @@ export class GPGUParticleSystem {
   private firstRender: boolean = true
   /** 更新计数器（用于调试） */
   private updateCount: number = 0
+  /** 基础粒子大小 */
+  private baseSize: number
+  /** 呼吸效果：振幅 */
+  private breathingAmplitude: number
+  /** 呼吸效果：频率 */
+  private breathingFrequency: number
 
   /**
    * 构造函数
@@ -267,6 +279,11 @@ export class GPGUParticleSystem {
     this.config = config
     this.noiseTexture = noiseTexture
     this.time = 0
+
+    // 初始化呼吸效果参数
+    this.baseSize = config.size
+    this.breathingAmplitude = config.breathingAmplitude ?? 0.3
+    this.breathingFrequency = config.breathingFrequency ?? 0.5
 
     // 初始化 GPU 计算渲染器
     const textureWidth = Math.ceil(Math.sqrt(config.count))
@@ -504,12 +521,20 @@ export class GPGUParticleSystem {
       uniforms: {
         tPosition: { value: tempTexture },
         uSize: { value: this.config.size },
-        uTextureSize: { value: new THREE.Vector2(width, height) }
+        uTextureSize: { value: new THREE.Vector2(width, height) },
+        uEnableBreathing: { value: this.config.enableBreathing ?? false },
+        uBreathingAmplitude: { value: this.breathingAmplitude },
+        uBreathingFrequency: { value: this.breathingFrequency },
+        uTime: { value: 0 }
       },
       vertexShader: `
         uniform sampler2D tPosition;
         uniform float uSize;
         uniform vec2 uTextureSize;
+        uniform bool uEnableBreathing;
+        uniform float uBreathingAmplitude;
+        uniform float uBreathingFrequency;
+        uniform float uTime;
         attribute vec3 color;
         varying vec3 vColor;
 
@@ -518,7 +543,7 @@ export class GPGUParticleSystem {
 
           // 从纹理读取位置
           vec4 posData = texture2D(tPosition, uv);
-          
+
           // 检查位置数据是否有效
           if (length(posData.rgb) < 0.001) {
             // 如果位置数据无效，跳过这个粒子
@@ -528,10 +553,18 @@ export class GPGUParticleSystem {
           }
 
           vec4 mvPosition = modelViewMatrix * vec4(posData.rgb, 1.0);
-          
-          // 计算点大小，随距离衰减
-          gl_PointSize = uSize * (300.0 / -mvPosition.z);
-          
+
+          // 计算基础点大小，随距离衰减
+          float basePointSize = uSize * (300.0 / -mvPosition.z);
+
+          // 如果启用呼吸效果，应用正弦波变化
+          if (uEnableBreathing) {
+            float breathingFactor = sin(uTime * uBreathingFrequency * 6.28318);
+            gl_PointSize = basePointSize * (1.0 + uBreathingAmplitude * breathingFactor);
+          } else {
+            gl_PointSize = basePointSize;
+          }
+
           gl_Position = projectionMatrix * mvPosition;
         }
       `,
@@ -612,6 +645,11 @@ export class GPGUParticleSystem {
         texture.needsUpdate = true
 
         this.points.material.uniforms.tPosition.value = texture
+
+        // 更新呼吸效果 uniforms
+        if (this.config.enableBreathing) {
+          this.points.material.uniforms.uTime.value = time
+        }
         
         // 强制标记材质需要更新
         this.points.material.needsUpdate = true
@@ -707,6 +745,61 @@ export class GPGUParticleSystem {
       this.colorManager.setTheme(theme)
     }
     this.updateColors()
+  }
+
+  /**
+   * 启用/禁用呼吸效果
+   *
+   * @param enabled - 是否启用呼吸效果
+   */
+  setBreathingEnabled(enabled: boolean): void {
+    this.config.enableBreathing = enabled
+
+    // 更新 shader uniform
+    if (this.points.material instanceof THREE.ShaderMaterial) {
+      this.points.material.uniforms.uEnableBreathing.value = enabled
+    }
+  }
+
+  /**
+   * 设置呼吸效果的振幅
+   *
+   * @param amplitude - 振幅（0-1），控制粒子大小的变化范围
+   */
+  setBreathingAmplitude(amplitude: number): void {
+    this.breathingAmplitude = Math.max(0, Math.min(1, amplitude))
+
+    // 更新 shader uniform
+    if (this.points.material instanceof THREE.ShaderMaterial) {
+      this.points.material.uniforms.uBreathingAmplitude.value = this.breathingAmplitude
+    }
+  }
+
+  /**
+   * 设置呼吸效果的频率
+   *
+   * @param frequency - 频率（Hz），控制呼吸速度
+   */
+  setBreathingFrequency(frequency: number): void {
+    this.breathingFrequency = Math.max(0.1, frequency)
+
+    // 更新 shader uniform
+    if (this.points.material instanceof THREE.ShaderMaterial) {
+      this.points.material.uniforms.uBreathingFrequency.value = this.breathingFrequency
+    }
+  }
+
+  /**
+   * 获取呼吸效果状态
+   *
+   * @returns 呼吸效果配置
+   */
+  getBreathingConfig(): { enabled: boolean; amplitude: number; frequency: number } {
+    return {
+      enabled: this.config.enableBreathing ?? false,
+      amplitude: this.breathingAmplitude,
+      frequency: this.breathingFrequency
+    }
   }
 
   /**

@@ -33,6 +33,12 @@ export interface ParticleConfig {
   enableTrails?: boolean
   /** 轨迹配置（仅当 enableTrails 为 true 时生效） */
   trailConfig?: TrailConfig
+  /** 是否启用呼吸效果 */
+  enableBreathing?: boolean
+  /** 呼吸效果的振幅（0-1） */
+  breathingAmplitude?: number
+  /** 呼吸效果的频率（Hz） */
+  breathingFrequency?: number
 }
 
 /**
@@ -68,6 +74,14 @@ export class ParticleSystem {
   private colorManager: ColorManager | null = null
   /** 标记是否已释放资源 */
   private disposed: boolean = false
+  /** 基础粒子大小 */
+  private baseSize: number
+  /** 呼吸效果：振幅 */
+  private breathingAmplitude: number
+  /** 呼吸效果：频率 */
+  private breathingFrequency: number
+  /** 累计时间（用于呼吸效果） */
+  private accumulatedTime: number = 0
 
   /**
    * 构造函数，初始化粒子系统
@@ -105,9 +119,15 @@ export class ParticleSystem {
   ) {
     this.config = config
     this.noiseTexture = noiseTexture
+
+    // 初始化呼吸效果参数
+    this.baseSize = config.size
+    this.breathingAmplitude = config.breathingAmplitude ?? 0.3
+    this.breathingFrequency = config.breathingFrequency ?? 0.5
+
     this.points = this.create(useDefaultColor)
     scene.add(this.points)
-    
+
     // 如果启用了轨迹，初始化轨迹管理器
     if (config.enableTrails && config.trailConfig) {
       this.trailManager = new TrailManager(scene, config.count, config.trailConfig)
@@ -326,21 +346,25 @@ export class ParticleSystem {
         }
   
         // 标记位置属性需要更新
-  
-                this.points.geometry.attributes.position.needsUpdate = true
-  
         
-  
-                // 更新颜色（如果有颜色管理器）
-  
-                if (this.colorManager) {
-  
-                  this.colorManager.update(deltaTime)
-  
-                  this.updateColors()
-  
-                }
+                        this.points.geometry.attributes.position.needsUpdate = true
+        
                 
+        
+                        // 更新呼吸效果（如果启用）
+                        if (this.config.enableBreathing) {
+                          this.updateBreathing(deltaTime)
+                        }
+        
+                        // 更新颜色（如果有颜色管理器）
+        
+                        if (this.colorManager) {
+        
+                          this.colorManager.update(deltaTime)
+        
+                          this.updateColors()
+        
+                        }                
                 // 更新轨迹（如果启用了轨迹）
                 if (this.trailManager) {
                   this.trailManager.update(positions)
@@ -410,26 +434,96 @@ export class ParticleSystem {
     }
   
     /**
-     * 切换颜色主题
-     * 
-     * 快捷方法：直接切换颜色主题。
-     * 
-     * @param theme - 新的颜色主题
-     * 
-     * @example
-     * ```typescript
-     * particleSystem.setColorTheme(newTheme);
-     * ```
-     */
-    setColorTheme(theme: ColorTheme): void {
-      if (!this.colorManager) {
-        this.colorManager = new ColorManager(theme, this.config.count)
-      } else {
-        this.colorManager.setTheme(theme)
+       * 切换颜色主题
+       *
+       * 快捷方法：直接切换颜色主题。
+       *
+       * @param theme - 新的颜色主题
+       *
+       * @example
+       * ```typescript
+       * particleSystem.setColorTheme(newTheme);
+       * ```
+       */
+      setColorTheme(theme: ColorTheme): void {
+        if (!this.colorManager) {
+          this.colorManager = new ColorManager(theme, this.config.count)
+        } else {
+          this.colorManager.setTheme(theme)
+        }
+        this.updateColors()
       }
-      this.updateColors()
-    }
-  /**
+    
+      /**
+       * 更新呼吸效果
+       *
+       * 根据时间动态调整粒子大小，产生呼吸效果。
+       * 使用正弦波函数实现平滑的大小变化。
+       *
+       * @param deltaTime - 时间增量（毫秒）
+       * @private
+       */
+      private updateBreathing(deltaTime: number): void {
+        // 累计时间（转换为秒）
+        this.accumulatedTime += deltaTime / 1000
+    
+        // 使用正弦波计算大小变化
+        // 大小范围：baseSize * (1 - amplitude) 到 baseSize * (1 + amplitude)
+        const breathingFactor = Math.sin(this.accumulatedTime * this.breathingFrequency * Math.PI * 2)
+        const currentSize = this.baseSize * (1 + this.breathingAmplitude * breathingFactor)
+    
+        // 更新材质大小
+        if (this.points.material instanceof THREE.PointsMaterial) {
+          this.points.material.size = currentSize
+        }
+      }
+    
+      /**
+       * 启用/禁用呼吸效果
+       *
+       * @param enabled - 是否启用呼吸效果
+       */
+      setBreathingEnabled(enabled: boolean): void {
+        this.config.enableBreathing = enabled
+    
+        // 如果禁用，重置到基础大小
+        if (!enabled) {
+          if (this.points.material instanceof THREE.PointsMaterial) {
+            this.points.material.size = this.baseSize
+          }
+        }
+      }
+    
+      /**
+       * 设置呼吸效果的振幅
+       *
+       * @param amplitude - 振幅（0-1），控制粒子大小的变化范围
+       */
+      setBreathingAmplitude(amplitude: number): void {
+        this.breathingAmplitude = Math.max(0, Math.min(1, amplitude))
+      }
+    
+      /**
+       * 设置呼吸效果的频率
+       *
+       * @param frequency - 频率（Hz），控制呼吸速度
+       */
+      setBreathingFrequency(frequency: number): void {
+        this.breathingFrequency = Math.max(0.1, frequency)
+      }
+    
+      /**
+       * 获取呼吸效果状态
+       *
+       * @returns 呼吸效果配置
+       */
+      getBreathingConfig(): { enabled: boolean; amplitude: number; frequency: number } {
+        return {
+          enabled: this.config.enableBreathing ?? false,
+          amplitude: this.breathingAmplitude,
+          frequency: this.breathingFrequency
+        }
+      }  /**
    * 释放粒子系统资源
    *
    * 从场景中移除粒子系统，并释放几何体和材质资源。

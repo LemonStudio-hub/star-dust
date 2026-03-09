@@ -50,6 +50,12 @@ export interface AppConfig {
   trailConfig?: TrailConfig
   /** 是否使用 GPGPU 模式（自动检测，默认自动） */
   useGPGPU?: boolean | 'auto'
+  /** 是否启用粒子呼吸效果 */
+  enableParticleBreathing?: boolean
+  /** 呼吸效果的振幅（0-1） */
+  breathingAmplitude?: number
+  /** 呼吸效果的频率（Hz） */
+  breathingFrequency?: number
 }
 
 /**
@@ -771,9 +777,9 @@ export class AppManager {
 
   /**
    * 释放应用资源
-   * 
+   *
    * 清理所有子系统，释放内存和资源。
-   * 
+   *
    * @example
    * ```typescript
    * appManager.dispose();
@@ -819,6 +825,42 @@ export class AppManager {
     } catch (error) {
       console.error('释放应用资源时发生错误:', error)
     }
+  }
+
+  /**
+   * 启用/禁用粒子呼吸效果
+   *
+   * @param enabled - 是否启用呼吸效果
+   */
+  setParticleBreathingEnabled(enabled: boolean): void {
+    this.particleSystem.setBreathingEnabled(enabled)
+  }
+
+  /**
+   * 设置粒子呼吸效果的振幅
+   *
+   * @param amplitude - 振幅（0-1），控制粒子大小的变化范围
+   */
+  setParticleBreathingAmplitude(amplitude: number): void {
+    this.particleSystem.setBreathingAmplitude(amplitude)
+  }
+
+  /**
+   * 设置粒子呼吸效果的频率
+   *
+   * @param frequency - 频率（Hz），控制呼吸速度
+   */
+  setParticleBreathingFrequency(frequency: number): void {
+    this.particleSystem.setBreathingFrequency(frequency)
+  }
+
+  /**
+   * 获取粒子呼吸效果状态
+   *
+   * @returns 呼吸效果配置
+   */
+  getParticleBreathingConfig(): { enabled: boolean; amplitude: number; frequency: number } {
+    return this.particleSystem.getBreathingConfig()
   }
 
   /**
