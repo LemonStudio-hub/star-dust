@@ -698,6 +698,14 @@ export class GPGUParticleSystem {
     }
 
     try {
+      // 如果颜色管理器需要粒子位置，从 GPU 读取位置数据
+      if (this.colorManager.getParticlePositions() === null) {
+        const positions = this.readGPUPositions()
+        if (positions) {
+          this.colorManager.setParticlePositions(positions, this.config.boundsRadius)
+        }
+      }
+
       const colors = this.colorManager.getColors()
       const colorAttribute = this.points.geometry.attributes.color
       const array = colorAttribute.array as Float32Array
@@ -706,6 +714,58 @@ export class GPGUParticleSystem {
       colorAttribute.needsUpdate = true
     } catch (error) {
       console.error('更新粒子颜色时发生错误:', error)
+    }
+  }
+
+  /**
+   * 从 GPU 读取粒子位置数据
+   *
+   * 这是一个开销较大的操作，仅在需要时调用。
+   *
+   * @returns 粒子位置数组，失败则返回 null
+   * @private
+   */
+  private readGPUPositions(): Float32Array | null {
+    try {
+      if (!this.positionVariable) {
+        return null
+      }
+
+      const renderTarget = this.gpgpu.getCurrentRenderTarget(this.positionVariable)
+      if (!renderTarget) {
+        return null
+      }
+
+      // 创建临时缓冲区读取 GPU 数据
+      const textureWidth = renderTarget.width
+      const textureHeight = renderTarget.height
+      const bufferSize = this.config.count * 4
+      const buffer = new Float32Array(bufferSize)
+
+      // 从 GPU 读取数据
+      this.renderer.renderer.readRenderTargetPixels(
+        renderTarget,
+        0,
+        0,
+        textureWidth,
+        textureHeight,
+        buffer
+      )
+
+      // 提取位置数据（只取 RGB，忽略 A）
+      const positions = new Float32Array(this.config.count * 3)
+      for (let i = 0; i < this.config.count; i++) {
+        const i4 = i * 4
+        const i3 = i * 3
+        positions[i3] = buffer[i4]
+        positions[i3 + 1] = buffer[i4 + 1]
+        positions[i3 + 2] = buffer[i4 + 2]
+      }
+
+      return positions
+    } catch (error) {
+      console.error('从 GPU 读取位置数据失败:', error)
+      return null
     }
   }
 

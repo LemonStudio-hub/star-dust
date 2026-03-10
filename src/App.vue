@@ -317,7 +317,7 @@ const fpsClass = computed(() => {
 /**
  * 当前选中的颜色主题
  */
-const currentTheme = ref<ColorTheme>(PRESET_THEMES[0])
+const currentTheme = ref<ColorTheme>(PRESET_THEMES[0]) // 默认为位置动态主题
 
 /**
  * 所有预设主题

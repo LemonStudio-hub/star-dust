@@ -15,6 +15,7 @@ import { TrailConfig } from './particles/TrailManager'
 import { MouseInteraction, TouchInteraction, GestureHandler } from './interaction'
 import { Renderer, RendererConfig } from './renderer/Renderer'
 import { ColorManager, ColorTheme } from './colors/ColorTheme'
+import { PositionBasedTheme } from './colors/presets/PositionBased'
 
 /**
  * 粒子计算模式
@@ -423,6 +424,10 @@ export class AppManager {
       // 步骤 4：初始化交互系统
       console.log('初始化交互系统...')
       this.initializeInteractions()
+
+      // 步骤 5：设置默认颜色主题为位置动态主题
+      console.log('设置默认颜色主题...')
+      this.particleSystem.setColorTheme(PositionBasedTheme)
 
       // 步骤 5：启动主循环
       console.log('启动应用...')

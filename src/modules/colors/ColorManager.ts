@@ -43,6 +43,10 @@ export class ColorManager {
   private config: ColorConfig
   /** 亮度因子（随机变化） */
   private brightnessFactors: Float32Array
+  /** 粒子位置引用（用于基于位置的颜色计算） */
+  private particlePositions: Float32Array | null = null
+  /** 边界半径（用于位置归一化） */
+  private boundsRadius: number = 50
 
   /**
    * 构造函数，初始化颜色管理器
@@ -72,7 +76,7 @@ export class ColorManager {
 
   /**
    * 初始化颜色
-   * 
+   *
    * 根据当前主题的渐变类型初始化所有粒子的颜色。
    */
   initialize(): void {
@@ -91,6 +95,10 @@ export class ColorManager {
           break
         case 'radial':
           this.initializeRadial()
+          break
+        case 'position':
+          // 位置类型需要在 update 中动态计算，这里只初始化亮度因子
+          this.initializeBrightness()
           break
         default:
           console.warn(`Unknown gradient type: ${this.currentTheme.gradientType}, falling back to random`)
@@ -160,10 +168,10 @@ export class ColorManager {
 
   /**
    * 初始化径向渐变的颜色
-   * 
+   *
    * 根据粒子到中心的距离进行径向渐变。
    * 注意：此方法需要粒子位置信息，暂时使用随机分布作为占位。
-   * 
+   *
    * @private
    */
   private initializeRadial(): void {
@@ -172,19 +180,131 @@ export class ColorManager {
   }
 
   /**
+   * 初始化亮度因子
+   *
+   * 为每个粒子生成随机亮度变化。
+   *
+   * @private
+   */
+  private initializeBrightness(): void {
+    for (let i = 0; i < this.particleCount; i++) {
+      this.brightnessFactors[i] = 0.7 + Math.random() * 0.3
+    }
+  }
+
+  /**
+   * 初始化基于位置的颜色
+   *
+   * 根据粒子在 3D 空间中的位置计算颜色。
+   *
+   * @private
+   */
+  private initializePosition(): void {
+    if (!this.particlePositions) {
+      console.warn('Particle positions not set, using random colors')
+      this.initializeRandom()
+      return
+    }
+
+    for (let i = 0; i < this.particleCount; i++) {
+      const i3 = i * 3
+      const x = this.particlePositions[i3]
+      const y = this.particlePositions[i3 + 1]
+      const z = this.particlePositions[i3 + 2]
+
+      // 计算基于位置的颜色
+      const color = this.calculatePositionColor(x, y, z)
+      const brightness = this.brightnessFactors[i]
+
+      this.colors[i3] = color[0] * brightness
+      this.colors[i3 + 1] = color[1] * brightness
+      this.colors[i3 + 2] = color[2] * brightness
+    }
+  }
+
+  /**
+   * 计算基于位置的颜色
+   *
+   * 根据粒子在 3D 空间中的位置计算颜色。
+   * X 轴影响红色，Y 轴影响绿色，Z 轴影响蓝色。
+   *
+   * @param x - X 坐标
+   * @param y - Y 坐标
+   * @param z - Z 坐标
+   * @returns RGB 颜色值
+   * @private
+   */
+  private calculatePositionColor(x: number, y: number, z: number): [number, number, number] {
+    // 归一化位置到 [0, 1]
+    const nx = (x / this.boundsRadius + 1) / 2
+    const ny = (y / this.boundsRadius + 1) / 2
+    const nz = (z / this.boundsRadius + 1) / 2
+
+    // 使用正弦函数创建平滑的颜色变化
+    const r = (Math.sin(nx * Math.PI * 2 + this.time * 0.001) + 1) / 2
+    const g = (Math.sin(ny * Math.PI * 2 + this.time * 0.001 + Math.PI / 3) + 1) / 2
+    const b = (Math.sin(nz * Math.PI * 2 + this.time * 0.001 + Math.PI * 2 / 3) + 1) / 2
+
+    // 根据位置插值颜色
+    const t = (nx + ny + nz) / 3
+    const baseColor = this.interpolateColor(this.currentTheme.colors, t)
+
+    // 混合位置颜色和主题颜色
+    return [
+      (baseColor[0] + r) / 2,
+      (baseColor[1] + g) / 2,
+      (baseColor[2] + b) / 2
+    ]
+  }
+
+  /**
+   * 设置粒子位置引用
+   *
+   * 设置粒子位置数组，用于基于位置的颜色计算。
+   *
+   * @param positions - 粒子位置数组（Float32Array）
+   * @param boundsRadius - 边界半径（用于位置归一化）
+   */
+  setParticlePositions(positions: Float32Array, boundsRadius: number): void {
+    this.particlePositions = positions
+    this.boundsRadius = boundsRadius
+  }
+
+  /**
+   * 获取粒子位置引用
+   *
+   * @returns 粒子位置数组
+   */
+  getParticlePositions(): Float32Array | null {
+    return this.particlePositions
+  }
+
+  /**
    * 更新颜色
-   * 
+   *
    * 根据动画类型更新颜色。每帧调用一次。
-   * 
+   *
    * @param deltaTime - 时间增量（毫秒）
-   * 
+   *
    * @example
    * ```typescript
    * colorManager.update(16.67); // 每帧调用
    * ```
    */
   update(deltaTime: number): void {
-    if (!this.initialized || !this.config.enableAnimation) {
+    if (!this.initialized) {
+      return
+    }
+
+    // 位置类型需要每帧重新计算
+    if (this.currentTheme.gradientType === 'position') {
+      this.time += deltaTime
+      this.initializePosition()
+      return
+    }
+
+    // 其他类型的动画
+    if (!this.config.enableAnimation) {
       return
     }
 

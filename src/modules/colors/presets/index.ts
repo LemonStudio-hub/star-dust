@@ -1,8 +1,8 @@
 /**
  * 预设颜色主题
- * 
+ *
  * 导出所有可用的预设颜色主题
- * 
+ *
  * @module colors/presets
  */
 
@@ -14,13 +14,15 @@ import { WarmToneTheme } from './WarmTone'
 import { RainbowTheme } from './Rainbow'
 import { SpeedFlowTheme } from './SpeedFlow'
 import { RadialGlowTheme } from './RadialGlow'
+import { PositionBasedTheme } from './PositionBased'
 
 /**
  * 所有预设颜色主题列表
- * 
+ *
  * 可以通过索引或名称访问特定主题
  */
 export const PRESET_THEMES: ColorTheme[] = [
+  PositionBasedTheme,  // 位置动态主题（默认）
   CyberPunkTheme,
   NatureTheme,
   CoolToneTheme,

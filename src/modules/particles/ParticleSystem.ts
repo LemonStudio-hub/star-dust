@@ -387,6 +387,11 @@ export class ParticleSystem {
       }
 
       try {
+        // 如果颜色管理器需要粒子位置，先设置位置
+        if (this.colorManager.getParticlePositions() === null && this.positions) {
+          this.colorManager.setParticlePositions(this.positions, this.config.boundsRadius)
+        }
+
         const colors = this.colorManager.getColors()
         const colorAttribute = this.points.geometry.attributes.color
         const array = colorAttribute.array as Float32Array
