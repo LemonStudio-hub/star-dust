@@ -63,6 +63,12 @@ export interface AppConfig {
   speedBasedSizeFactor?: number
   /** 视差强度（0-2），控制近大远小的效果强度 */
   parallaxStrength?: number
+  /** 是否启用雾效 */
+  enableFog?: boolean
+  /** 雾的浓度（0-0.1） */
+  fogDensity?: number
+  /** 雾的颜色（RGB，0-1） */
+  fogColor?: [number, number, number]
 }
 
 /**
@@ -410,7 +416,10 @@ export class AppManager {
           breathingFrequency: config.breathingFrequency,
           enableSpeedBasedSize: config.enableSpeedBasedSize ?? false,
           speedBasedSizeFactor: config.speedBasedSizeFactor,
-          parallaxStrength: config.parallaxStrength
+          parallaxStrength: config.parallaxStrength,
+          enableFog: config.enableFog ?? true,
+          fogDensity: config.fogDensity,
+          fogColor: config.fogColor
         }
         this.particleSystem = new GPGUParticleSystem(
           this.renderer.scene,
@@ -434,7 +443,10 @@ export class AppManager {
           breathingFrequency: config.breathingFrequency,
           enableSpeedBasedSize: config.enableSpeedBasedSize ?? false,
           speedBasedSizeFactor: config.speedBasedSizeFactor,
-          parallaxStrength: config.parallaxStrength
+          parallaxStrength: config.parallaxStrength,
+          enableFog: config.enableFog ?? true,
+          fogDensity: config.fogDensity,
+          fogColor: config.fogColor
         }
         this.particleSystem = new ParticleSystem(this.renderer.scene, particleConfig, this.noiseTexture)
       }

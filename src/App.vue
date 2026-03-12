@@ -246,6 +246,40 @@
                 class="control-slider"
               >
             </div>
+
+            <!-- 雾效开关 -->
+            <div class="control-group">
+              <label class="control-label">
+                <span class="label-text">雾效</span>
+                <span class="label-value">{{ particleConfig.enableFog ? '开启' : '关闭' }}</span>
+              </label>
+              <div class="toggle-switch">
+                <input 
+                  type="checkbox" 
+                  v-model="particleConfig.enableFog" 
+                  @change="updateParticleConfig"
+                  class="toggle-checkbox"
+                >
+                <span class="toggle-slider"></span>
+              </div>
+            </div>
+
+            <!-- 雾效浓度 -->
+            <div class="control-group" v-if="particleConfig.enableFog">
+              <label class="control-label">
+                <span class="label-text">雾效浓度</span>
+                <span class="label-value">{{ particleConfig.fogDensity.toFixed(3) }}</span>
+              </label>
+              <input 
+                type="range" 
+                v-model.number="particleConfig.fogDensity" 
+                min="0.001" 
+                max="0.1" 
+                step="0.001"
+                @input="updateParticleConfig"
+                class="control-slider"
+              >
+            </div>
           </div>
 
           <div class="dashboard-footer">
@@ -323,7 +357,9 @@ const particleConfig = reactive({
   maxSpeed: 0.18,
   enableSpeedBasedSize: true,
   speedBasedSizeFactor: 1.0,
-  parallaxStrength: 1.0
+  parallaxStrength: 1.0,
+  enableFog: true,
+  fogDensity: 0.01
 })
 
 /**
@@ -630,7 +666,9 @@ onMounted(() => {
       breathingFrequency: 0.5,         // 呼吸频率
       enableSpeedBasedSize: particleConfig.enableSpeedBasedSize,  // 启用基于速度的大小变化
       speedBasedSizeFactor: particleConfig.speedBasedSizeFactor,    // 速度对大小的影响因子
-      parallaxStrength: particleConfig.parallaxStrength             // 视差强度
+      parallaxStrength: particleConfig.parallaxStrength,             // 视差强度
+      enableFog: particleConfig.enableFog,                          // 启用雾效
+      fogDensity: particleConfig.fogDensity                         // 雾效浓度
     }
 
     // 创建并启动应用管理器

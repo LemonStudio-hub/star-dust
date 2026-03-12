@@ -201,6 +201,12 @@ export interface GPGUParticleConfig {
   speedBasedSizeFactor?: number
   /** 视差强度（0-2），控制近大远小的效果强度 */
   parallaxStrength?: number
+  /** 是否启用雾效 */
+  enableFog?: boolean
+  /** 雾的浓度（0-0.1） */
+  fogDensity?: number
+  /** 雾的颜色（RGB，0-1） */
+  fogColor?: [number, number, number]
 }
 
 /**
@@ -271,6 +277,12 @@ export class GPGUParticleSystem {
   private parallaxStrength: number
   /** 透视衰减系数（根据相机 FOV 和距离计算） */
   private perspectiveScale: number
+  /** 是否启用雾效 */
+  private enableFog: boolean
+  /** 雾的浓度 */
+  private fogDensity: number
+  /** 雾的颜色 */
+  private fogColor: [number, number, number]
 
   /**
    * 构造函数
@@ -304,6 +316,11 @@ export class GPGUParticleSystem {
     // 公式: tan(FOV/2) * distance
     const fovRad = (75 * Math.PI) / 180
     this.perspectiveScale = Math.tan(fovRad / 2) * 80 * this.parallaxStrength
+
+    // 初始化雾效参数
+    this.enableFog = config.enableFog ?? true
+    this.fogDensity = config.fogDensity ?? 0.01
+    this.fogColor = config.fogColor ?? [0.0, 0.0, 0.1]  // 默认深蓝色雾
 
     // 初始化 GPU 计算渲染器
     const textureWidth = Math.ceil(Math.sqrt(config.count))
@@ -550,6 +567,9 @@ export class GPGUParticleSystem {
         uSpeedBasedSizeFactor: { value: this.speedBasedSizeFactor },
         uMaxSpeed: { value: this.config.maxSpeed },
         uPerspectiveScale: { value: this.perspectiveScale },
+        uEnableFog: { value: this.enableFog },
+        uFogDensity: { value: this.fogDensity },
+        uFogColor: { value: new THREE.Vector3(...this.fogColor) },
         uTime: { value: 0 }
       },
       vertexShader: `
@@ -564,9 +584,12 @@ export class GPGUParticleSystem {
         uniform float uSpeedBasedSizeFactor;
         uniform float uMaxSpeed;
         uniform float uPerspectiveScale;
+        uniform float uEnableFog;
+        uniform float uFogDensity;
         uniform float uTime;
         attribute vec3 color;
         varying vec3 vColor;
+        varying float vFogFactor;
 
         void main() {
           vColor = color;
@@ -606,17 +629,39 @@ export class GPGUParticleSystem {
           // 组合所有大小因子
           gl_PointSize = basePointSize * breathingFactor * speedFactor;
 
+          // 计算雾效因子
+          if (uEnableFog > 0.5) {
+            float distance = length(mvPosition.xyz);
+            vFogFactor = 1.0 - exp(-uFogDensity * distance);
+          } else {
+            vFogFactor = 0.0;
+          }
+
           gl_Position = projectionMatrix * mvPosition;
         }
       `,
       fragmentShader: `
+        uniform vec3 uFogColor;
+        uniform float uEnableFog;
         varying vec3 vColor;
+        varying float vFogFactor;
 
         void main() {
           float r = distance(gl_PointCoord, vec2(0.5));
           if (r > 0.5) discard;
           float alpha = 1.0 - smoothstep(0.3, 0.5, r);
-          gl_FragColor = vec4(vColor, alpha * 0.9);
+          
+          // 应用雾效
+          vec3 finalColor = vColor;
+          
+          if (uEnableFog > 0.5) {
+            // 混合粒子颜色和雾的颜色
+            finalColor = mix(vColor, uFogColor, vFogFactor);
+            // 根据距离衰减透明度
+            alpha *= (1.0 - vFogFactor * 0.7);
+          }
+          
+          gl_FragColor = vec4(finalColor, alpha * 0.9);
         }
       `,
       transparent: true,

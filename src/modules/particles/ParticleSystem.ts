@@ -45,6 +45,12 @@ export interface ParticleConfig {
   speedBasedSizeFactor?: number
   /** 视差强度（0-2），控制近大远小的效果强度 */
   parallaxStrength?: number
+  /** 是否启用景深雾效 */
+  enableFog?: boolean
+  /** 雾的浓度（0-1），控制淡化的程度 */
+  fogDensity?: number
+  /** 雾的颜色（RGB，0-1） */
+  fogColor?: [number, number, number]
 }
 
 /**
@@ -94,6 +100,12 @@ export class ParticleSystem {
   private parallaxStrength: number
   /** 透视衰减系数（根据相机 FOV 和距离计算） */
   private perspectiveScale: number
+  /** 是否启用雾效 */
+  private enableFog: boolean
+  /** 雾的浓度 */
+  private fogDensity: number
+  /** 雾的颜色 */
+  private fogColor: [number, number, number]
   /** 累计时间（用于呼吸效果） */
   private accumulatedTime: number = 0
   /** 当前呼吸因子 */
@@ -148,6 +160,11 @@ export class ParticleSystem {
     // 公式: tan(FOV/2) * distance
     const fovRad = (75 * Math.PI) / 180
     this.perspectiveScale = Math.tan(fovRad / 2) * 80 * this.parallaxStrength
+
+    // 初始化雾效参数
+    this.enableFog = config.enableFog ?? true
+    this.fogDensity = config.fogDensity ?? 0.01
+    this.fogColor = config.fogColor ?? [0.0, 0.0, 0.1]  // 默认深蓝色雾
 
     this.points = this.create(useDefaultColor)
     scene.add(this.points)
@@ -273,31 +290,61 @@ export class ParticleSystem {
         uniforms: {
           uBaseSize: { value: this.config.size },
           uTexture: { value: particleTexture },
-          uPerspectiveScale: { value: this.perspectiveScale }
+          uPerspectiveScale: { value: this.perspectiveScale },
+          uEnableFog: { value: this.enableFog },
+          uFogDensity: { value: this.fogDensity },
+          uFogColor: { value: new THREE.Vector3(...this.fogColor) }
         },
         vertexShader: `
           attribute float size;
           attribute vec3 color;
           varying vec3 vColor;
+          varying float vFogFactor;
           uniform float uBaseSize;
           uniform float uPerspectiveScale;
+          uniform float uEnableFog;
+          uniform float uFogDensity;
 
           void main() {
             vColor = color;
             vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
             // 使用透视衰减系数实现近大远小效果
             gl_PointSize = uBaseSize * size * uPerspectiveScale / -mvPosition.z;
+            
+            // 计算雾效因子
+            if (uEnableFog > 0.5) {
+              float distance = length(mvPosition.xyz);
+              vFogFactor = 1.0 - exp(-uFogDensity * distance);
+            } else {
+              vFogFactor = 0.0;
+            }
+            
             gl_Position = projectionMatrix * mvPosition;
           }
         `,
         fragmentShader: `
           uniform sampler2D uTexture;
+          uniform vec3 uFogColor;
+          uniform float uEnableFog;
           varying vec3 vColor;
+          varying float vFogFactor;
 
           void main() {
             vec4 texColor = texture2D(uTexture, gl_PointCoord);
             if (texColor.a < 0.1) discard;
-            gl_FragColor = vec4(vColor, texColor.a * 0.9);
+            
+            // 应用雾效
+            vec3 finalColor = vColor;
+            float alpha = texColor.a * 0.9;
+            
+            if (uEnableFog > 0.5) {
+              // 混合粒子颜色和雾的颜色
+              finalColor = mix(vColor, uFogColor, vFogFactor);
+              // 根据距离衰减透明度
+              alpha *= (1.0 - vFogFactor * 0.7);
+            }
+            
+            gl_FragColor = vec4(finalColor, alpha);
           }
         `,
         transparent: true,
