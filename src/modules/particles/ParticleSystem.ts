@@ -39,6 +39,12 @@ export interface ParticleConfig {
   breathingAmplitude?: number
   /** 呼吸效果的频率（Hz） */
   breathingFrequency?: number
+  /** 是否启用基于速度的大小变化 */
+  enableSpeedBasedSize?: boolean
+  /** 速度对大小的影响因子（0-2） */
+  speedBasedSizeFactor?: number
+  /** 视差强度（0-2），控制近大远小的效果强度 */
+  parallaxStrength?: number
 }
 
 /**
@@ -66,6 +72,8 @@ export class ParticleSystem {
   private positions: Float32Array | null = null
   /** 粒子速度数组 */
   private velocities: Float32Array | null = null
+  /** 粒子大小数组 */
+  private sizes: Float32Array | null = null
   /** 粒子系统配置 */
   private config: ParticleConfig
   /** 噪声纹理引用 */
@@ -80,8 +88,16 @@ export class ParticleSystem {
   private breathingAmplitude: number
   /** 呼吸效果：频率 */
   private breathingFrequency: number
+  /** 速度对大小的影响因子 */
+  private speedBasedSizeFactor: number
+  /** 视差强度 */
+  private parallaxStrength: number
+  /** 透视衰减系数（根据相机 FOV 和距离计算） */
+  private perspectiveScale: number
   /** 累计时间（用于呼吸效果） */
   private accumulatedTime: number = 0
+  /** 当前呼吸因子 */
+  private currentBreathingFactor: number = 1.0
 
   /**
    * 构造函数，初始化粒子系统
@@ -124,6 +140,14 @@ export class ParticleSystem {
     this.baseSize = config.size
     this.breathingAmplitude = config.breathingAmplitude ?? 0.3
     this.breathingFrequency = config.breathingFrequency ?? 0.5
+    this.speedBasedSizeFactor = config.speedBasedSizeFactor ?? 1.0
+    this.parallaxStrength = config.parallaxStrength ?? 1.0
+
+    // 计算透视衰减系数
+    // 根据相机 FOV (75度) 和距离 (80) 计算
+    // 公式: tan(FOV/2) * distance
+    const fovRad = (75 * Math.PI) / 180
+    this.perspectiveScale = Math.tan(fovRad / 2) * 80 * this.parallaxStrength
 
     this.points = this.create(useDefaultColor)
     scene.add(this.points)
@@ -181,7 +205,7 @@ export class ParticleSystem {
   /**
    * 创建粒子系统
    *
-   * 初始化粒子的位置、速度和颜色。
+   * 初始化粒子的位置、速度、颜色和大小。
    * 粒子在球体内随机分布，具有随机速度。
    *
    * @param useDefaultColor - 是否使用默认颜色
@@ -192,6 +216,7 @@ export class ParticleSystem {
     const geometry = new THREE.BufferGeometry()
     this.positions = new Float32Array(this.config.count * 3)
     this.velocities = new Float32Array(this.config.count * 3)
+    this.sizes = new Float32Array(this.config.count)
     const colors = new Float32Array(this.config.count * 3)
 
     // 初始化每个粒子
@@ -215,6 +240,9 @@ export class ParticleSystem {
       this.velocities[i3 + 1] = Math.sin(angle) * speed
       this.velocities[i3 + 2] = (Math.random() - 0.5) * speed
 
+      // 初始化大小（默认为 1.0，后续会根据速度更新）
+      this.sizes[i] = 1.0
+
       // 初始化颜色（白色占位符，稍后由 ColorManager 替换）
       colors[i3] = 1.0
       colors[i3 + 1] = 1.0
@@ -224,6 +252,7 @@ export class ParticleSystem {
     // 设置几何体属性
     geometry.setAttribute('position', new THREE.BufferAttribute(this.positions, 3))
     geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3))
+    geometry.setAttribute('size', new THREE.BufferAttribute(this.sizes, 1))
 
     // 如果使用默认颜色，创建颜色管理器并初始化
     if (useDefaultColor) {
@@ -233,19 +262,64 @@ export class ParticleSystem {
     // 创建圆形渐变纹理
     const particleTexture = this.createCircularTexture()
 
+    // 检查是否启用基于速度的大小变化
+    const useCustomShader = this.config.enableSpeedBasedSize === true
+
     // 创建材质
-    const material = new THREE.PointsMaterial({
-      size: this.config.size,
-      vertexColors: true,  // 使用顶点颜色
-      transparent: true,
-      opacity: 0.9,
-      sizeAttenuation: true,  // 启用透视大小衰减
-      blending: THREE.AdditiveBlending,  // 加法混合，产生发光效果
-      depthWrite: false,
-      depthTest: true,
-      map: particleTexture,  // 使用圆形渐变纹理
-      alphaMap: particleTexture  // 使用相同的纹理作为透明度贴图
-    })
+    let material: THREE.Material
+    if (useCustomShader) {
+      // 使用自定义 Shader 以支持逐粒子大小
+      material = new THREE.ShaderMaterial({
+        uniforms: {
+          uBaseSize: { value: this.config.size },
+          uTexture: { value: particleTexture },
+          uPerspectiveScale: { value: this.perspectiveScale }
+        },
+        vertexShader: `
+          attribute float size;
+          attribute vec3 color;
+          varying vec3 vColor;
+          uniform float uBaseSize;
+          uniform float uPerspectiveScale;
+
+          void main() {
+            vColor = color;
+            vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
+            // 使用透视衰减系数实现近大远小效果
+            gl_PointSize = uBaseSize * size * uPerspectiveScale / -mvPosition.z;
+            gl_Position = projectionMatrix * mvPosition;
+          }
+        `,
+        fragmentShader: `
+          uniform sampler2D uTexture;
+          varying vec3 vColor;
+
+          void main() {
+            vec4 texColor = texture2D(uTexture, gl_PointCoord);
+            if (texColor.a < 0.1) discard;
+            gl_FragColor = vec4(vColor, texColor.a * 0.9);
+          }
+        `,
+        transparent: true,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+        depthTest: true
+      })
+    } else {
+      // 使用标准材质
+      material = new THREE.PointsMaterial({
+        size: this.config.size,
+        vertexColors: true,
+        transparent: true,
+        opacity: 0.9,
+        sizeAttenuation: true,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+        depthTest: true,
+        map: particleTexture,
+        alphaMap: particleTexture
+      })
+    }
 
     return new THREE.Points(geometry, material)
   }
@@ -354,6 +428,11 @@ export class ParticleSystem {
                         // 更新呼吸效果（如果启用）
                         if (this.config.enableBreathing) {
                           this.updateBreathing(deltaTime)
+                        }
+
+                        // 更新粒子大小（如果启用基于速度的大小变化）
+                        if (this.config.enableSpeedBasedSize && this.sizes) {
+                          this.updateParticleSizes()
                         }
         
                         // 更新颜色（如果有颜色管理器）
@@ -471,15 +550,59 @@ export class ParticleSystem {
       private updateBreathing(deltaTime: number): void {
         // 累计时间（转换为秒）
         this.accumulatedTime += deltaTime / 1000
-    
+
         // 使用正弦波计算大小变化
         // 大小范围：baseSize * (1 - amplitude) 到 baseSize * (1 + amplitude)
         const breathingFactor = Math.sin(this.accumulatedTime * this.breathingFrequency * Math.PI * 2)
-        const currentSize = this.baseSize * (1 + this.breathingAmplitude * breathingFactor)
-    
-        // 更新材质大小
-        if (this.points.material instanceof THREE.PointsMaterial) {
-          this.points.material.size = currentSize
+        this.currentBreathingFactor = 1 + this.breathingAmplitude * breathingFactor
+
+        // 如果没有启用基于速度的大小变化，直接更新材质大小
+        if (!this.config.enableSpeedBasedSize) {
+          const currentSize = this.baseSize * this.currentBreathingFactor
+          if (this.points.material instanceof THREE.PointsMaterial) {
+            this.points.material.size = currentSize
+          } else if (this.points.material instanceof THREE.ShaderMaterial) {
+            this.points.material.uniforms.uBaseSize.value = currentSize
+          }
+        }
+      }
+
+      /**
+       * 更新粒子大小
+       *
+       * 根据呼吸效果和粒子速度计算每个粒子的大小。
+       * 速度越快的粒子越大。
+       *
+       * @private
+       */
+      private updateParticleSizes(): void {
+        if (!this.sizes || !this.velocities) {
+          return
+        }
+
+        const len = this.sizes.length
+
+        for (let i = 0; i < len; i++) {
+          const i3 = i * 3
+
+          // 计算粒子速度
+          const speed = Math.sqrt(
+            this.velocities[i3] * this.velocities[i3] +
+            this.velocities[i3 + 1] * this.velocities[i3 + 1] +
+            this.velocities[i3 + 2] * this.velocities[i3 + 2]
+          )
+
+          // 计算速度因子（归一化到 [0, 1]）
+          const speedFactor = Math.min(speed / this.config.maxSpeed, 1.0)
+
+          // 计算粒子大小：基础大小 * 呼吸因子 * (1 + 速度因子 * 影响因子)
+          this.sizes[i] = this.currentBreathingFactor * (1 + speedFactor * this.speedBasedSizeFactor)
+        }
+
+        // 标记大小属性需要更新
+        const sizeAttribute = this.points.geometry.attributes.size
+        if (sizeAttribute) {
+          sizeAttribute.needsUpdate = true
         }
       }
     

@@ -195,6 +195,57 @@
                 class="control-slider"
               >
             </div>
+
+            <!-- 速度影响大小开关 -->
+            <div class="control-group">
+              <label class="control-label">
+                <span class="label-text">速度影响大小</span>
+                <span class="label-value">{{ particleConfig.enableSpeedBasedSize ? '开启' : '关闭' }}</span>
+              </label>
+              <div class="toggle-switch">
+                <input 
+                  type="checkbox" 
+                  v-model="particleConfig.enableSpeedBasedSize" 
+                  @change="updateParticleConfig"
+                  class="toggle-checkbox"
+                >
+                <span class="toggle-slider"></span>
+              </div>
+            </div>
+
+            <!-- 速度影响因子 -->
+            <div class="control-group" v-if="particleConfig.enableSpeedBasedSize">
+              <label class="control-label">
+                <span class="label-text">速度影响因子</span>
+                <span class="label-value">{{ particleConfig.speedBasedSizeFactor.toFixed(2) }}</span>
+              </label>
+              <input 
+                type="range" 
+                v-model.number="particleConfig.speedBasedSizeFactor" 
+                min="0" 
+                max="2" 
+                step="0.1"
+                @input="updateParticleConfig"
+                class="control-slider"
+              >
+            </div>
+
+            <!-- 视差强度 -->
+            <div class="control-group">
+              <label class="control-label">
+                <span class="label-text">视差强度</span>
+                <span class="label-value">{{ particleConfig.parallaxStrength.toFixed(2) }}</span>
+              </label>
+              <input 
+                type="range" 
+                v-model.number="particleConfig.parallaxStrength" 
+                min="0" 
+                max="2" 
+                step="0.1"
+                @input="updateParticleConfig"
+                class="control-slider"
+              >
+            </div>
           </div>
 
           <div class="dashboard-footer">
@@ -269,7 +320,10 @@ const particleConfig = reactive({
   particleSize: 1.0,
   boundsRadius: 60,
   velocityScale: 0.1,
-  maxSpeed: 0.18
+  maxSpeed: 0.18,
+  enableSpeedBasedSize: true,
+  speedBasedSizeFactor: 1.0,
+  parallaxStrength: 1.0
 })
 
 /**
@@ -570,7 +624,13 @@ onMounted(() => {
         color: [0.5, 0.8, 1.0], // 轨迹颜色（RGB，0-1）
         opacity: 0.4,           // 轨迹透明度
         lineWidth: 1.2          // 轨迹宽度
-      }
+      },
+      enableParticleBreathing: true,   // 启用粒子呼吸效果
+      breathingAmplitude: 0.3,         // 呼吸振幅
+      breathingFrequency: 0.5,         // 呼吸频率
+      enableSpeedBasedSize: particleConfig.enableSpeedBasedSize,  // 启用基于速度的大小变化
+      speedBasedSizeFactor: particleConfig.speedBasedSizeFactor,    // 速度对大小的影响因子
+      parallaxStrength: particleConfig.parallaxStrength             // 视差强度
     }
 
     // 创建并启动应用管理器
@@ -1348,6 +1408,88 @@ canvas {
 
 .control-slider::-moz-range-thumb:hover {
   transform: scale(1.1);
+}
+
+/**
+ * Toggle 开关容器
+ */
+.toggle-switch {
+  position: relative;
+  width: 52px;
+  height: 28px;
+}
+
+/**
+ * Toggle 开关复选框
+ */
+.toggle-checkbox {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  cursor: pointer;
+  z-index: 2;
+}
+
+/**
+ * Toggle 开关滑块
+ */
+.toggle-slider {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 14px;
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.toggle-slider::before {
+  content: '';
+  position: absolute;
+  top: 4px;
+  left: 4px;
+  width: 20px;
+  height: 20px;
+  background: linear-gradient(135deg, #ffffff 0%, #e0e0e0 100%);
+  border-radius: 50%;
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+/**
+ * Toggle 开关选中状态
+ */
+.toggle-checkbox:checked + .toggle-slider {
+  background: linear-gradient(
+    135deg,
+    rgba(99, 102, 241, 0.8) 0%,
+    rgba(168, 85, 247, 0.8) 100%
+  );
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.toggle-checkbox:checked + .toggle-slider::before {
+  transform: translateX(24px);
+  background: linear-gradient(135deg, #ffffff 0%, #f5f5f5 100%);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
+}
+
+/**
+ * Toggle 开关悬停状态
+ */
+.toggle-checkbox:hover + .toggle-slider {
+  background: rgba(255, 255, 255, 0.25);
+}
+
+.toggle-checkbox:checked:hover + .toggle-slider {
+  background: linear-gradient(
+    135deg,
+    rgba(99, 102, 241, 0.9) 0%,
+    rgba(168, 85, 247, 0.9) 100%
+  );
 }
 
 /**

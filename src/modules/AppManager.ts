@@ -57,6 +57,12 @@ export interface AppConfig {
   breathingAmplitude?: number
   /** 呼吸效果的频率（Hz） */
   breathingFrequency?: number
+  /** 是否启用基于速度的大小变化 */
+  enableSpeedBasedSize?: boolean
+  /** 速度对大小的影响因子（0-2） */
+  speedBasedSizeFactor?: number
+  /** 视差强度（0-2），控制近大远小的效果强度 */
+  parallaxStrength?: number
 }
 
 /**
@@ -398,7 +404,13 @@ export class AppManager {
           velocityScale: config.velocityScale,
           maxSpeed: config.maxSpeed,
           noiseScale: 0.008,
-          timeScale: 0.0001
+          timeScale: 0.0001,
+          enableBreathing: config.enableParticleBreathing ?? false,
+          breathingAmplitude: config.breathingAmplitude,
+          breathingFrequency: config.breathingFrequency,
+          enableSpeedBasedSize: config.enableSpeedBasedSize ?? false,
+          speedBasedSizeFactor: config.speedBasedSizeFactor,
+          parallaxStrength: config.parallaxStrength
         }
         this.particleSystem = new GPGUParticleSystem(
           this.renderer.scene,
@@ -416,7 +428,13 @@ export class AppManager {
           velocityScale: config.velocityScale,
           maxSpeed: config.maxSpeed,
           enableTrails: config.enableTrails || false,
-          trailConfig: config.trailConfig
+          trailConfig: config.trailConfig,
+          enableBreathing: config.enableParticleBreathing ?? false,
+          breathingAmplitude: config.breathingAmplitude,
+          breathingFrequency: config.breathingFrequency,
+          enableSpeedBasedSize: config.enableSpeedBasedSize ?? false,
+          speedBasedSizeFactor: config.speedBasedSizeFactor,
+          parallaxStrength: config.parallaxStrength
         }
         this.particleSystem = new ParticleSystem(this.renderer.scene, particleConfig, this.noiseTexture)
       }
@@ -653,7 +671,13 @@ export class AppManager {
           velocityScale: this.savedConfig.velocityScale,
           maxSpeed: this.savedConfig.maxSpeed,
           noiseScale: 0.008,
-          timeScale: 0.0001
+          timeScale: 0.0001,
+          enableBreathing: this.savedConfig.enableParticleBreathing ?? false,
+          breathingAmplitude: this.savedConfig.breathingAmplitude,
+          breathingFrequency: this.savedConfig.breathingFrequency,
+          enableSpeedBasedSize: this.savedConfig.enableSpeedBasedSize ?? false,
+          speedBasedSizeFactor: this.savedConfig.speedBasedSizeFactor,
+          parallaxStrength: this.savedConfig.parallaxStrength
         }
         this.particleSystem = new GPGUParticleSystem(
           this.renderer.scene,
@@ -671,7 +695,13 @@ export class AppManager {
           velocityScale: this.savedConfig.velocityScale,
           maxSpeed: this.savedConfig.maxSpeed,
           enableTrails: this.savedConfig.enableTrails || false,
-          trailConfig: this.savedConfig.trailConfig
+          trailConfig: this.savedConfig.trailConfig,
+          enableBreathing: this.savedConfig.enableParticleBreathing ?? false,
+          breathingAmplitude: this.savedConfig.breathingAmplitude,
+          breathingFrequency: this.savedConfig.breathingFrequency,
+          enableSpeedBasedSize: this.savedConfig.enableSpeedBasedSize ?? false,
+          speedBasedSizeFactor: this.savedConfig.speedBasedSizeFactor,
+          parallaxStrength: this.savedConfig.parallaxStrength
         }
         this.particleSystem = new ParticleSystem(this.renderer.scene, particleConfig, this.noiseTexture)
       }
@@ -905,7 +935,13 @@ export class AppManager {
             velocityScale: config.velocityScale,
             maxSpeed: config.maxSpeed,
             noiseScale: 0.008,
-            timeScale: 0.0001
+            timeScale: 0.0001,
+            enableBreathing: this.savedConfig?.enableParticleBreathing ?? false,
+            breathingAmplitude: this.savedConfig?.breathingAmplitude,
+            breathingFrequency: this.savedConfig?.breathingFrequency,
+            enableSpeedBasedSize: this.savedConfig?.enableSpeedBasedSize ?? false,
+            speedBasedSizeFactor: this.savedConfig?.speedBasedSizeFactor,
+            parallaxStrength: this.savedConfig?.parallaxStrength
           }
           this.particleSystem = new GPGUParticleSystem(
             this.renderer.scene,
@@ -922,7 +958,13 @@ export class AppManager {
             velocityScale: config.velocityScale,
             maxSpeed: config.maxSpeed,
             enableTrails: this.savedConfig?.enableTrails || false,
-            trailConfig: this.savedConfig?.trailConfig
+            trailConfig: this.savedConfig?.trailConfig,
+            enableBreathing: this.savedConfig?.enableParticleBreathing ?? false,
+            breathingAmplitude: this.savedConfig?.breathingAmplitude,
+            breathingFrequency: this.savedConfig?.breathingFrequency,
+            enableSpeedBasedSize: this.savedConfig?.enableSpeedBasedSize ?? false,
+            speedBasedSizeFactor: this.savedConfig?.speedBasedSizeFactor,
+            parallaxStrength: this.savedConfig?.parallaxStrength
           }
           this.particleSystem = new ParticleSystem(this.renderer.scene, particleConfig, this.noiseTexture, true)
         }

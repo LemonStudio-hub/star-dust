@@ -195,6 +195,12 @@ export interface GPGUParticleConfig {
   breathingAmplitude?: number
   /** 呼吸效果的频率（Hz） */
   breathingFrequency?: number
+  /** 是否启用基于速度的大小变化 */
+  enableSpeedBasedSize?: boolean
+  /** 速度对大小的影响因子（0-2） */
+  speedBasedSizeFactor?: number
+  /** 视差强度（0-2），控制近大远小的效果强度 */
+  parallaxStrength?: number
 }
 
 /**
@@ -259,6 +265,12 @@ export class GPGUParticleSystem {
   private breathingAmplitude: number
   /** 呼吸效果：频率 */
   private breathingFrequency: number
+  /** 速度对大小的影响因子 */
+  private speedBasedSizeFactor: number
+  /** 视差强度 */
+  private parallaxStrength: number
+  /** 透视衰减系数（根据相机 FOV 和距离计算） */
+  private perspectiveScale: number
 
   /**
    * 构造函数
@@ -284,6 +296,14 @@ export class GPGUParticleSystem {
     this.baseSize = config.size
     this.breathingAmplitude = config.breathingAmplitude ?? 0.3
     this.breathingFrequency = config.breathingFrequency ?? 0.5
+    this.speedBasedSizeFactor = config.speedBasedSizeFactor ?? 1.0
+    this.parallaxStrength = config.parallaxStrength ?? 1.0
+
+    // 计算透视衰减系数
+    // 根据相机 FOV (75度) 和距离 (80) 计算
+    // 公式: tan(FOV/2) * distance
+    const fovRad = (75 * Math.PI) / 180
+    this.perspectiveScale = Math.tan(fovRad / 2) * 80 * this.parallaxStrength
 
     // 初始化 GPU 计算渲染器
     const textureWidth = Math.ceil(Math.sqrt(config.count))
@@ -520,20 +540,30 @@ export class GPGUParticleSystem {
     const material = new THREE.ShaderMaterial({
       uniforms: {
         tPosition: { value: tempTexture },
+        tVelocity: { value: tempTexture },
         uSize: { value: this.config.size },
         uTextureSize: { value: new THREE.Vector2(width, height) },
         uEnableBreathing: { value: this.config.enableBreathing ?? false },
         uBreathingAmplitude: { value: this.breathingAmplitude },
         uBreathingFrequency: { value: this.breathingFrequency },
+        uEnableSpeedBasedSize: { value: this.config.enableSpeedBasedSize ?? false },
+        uSpeedBasedSizeFactor: { value: this.speedBasedSizeFactor },
+        uMaxSpeed: { value: this.config.maxSpeed },
+        uPerspectiveScale: { value: this.perspectiveScale },
         uTime: { value: 0 }
       },
       vertexShader: `
         uniform sampler2D tPosition;
+        uniform sampler2D tVelocity;
         uniform float uSize;
         uniform vec2 uTextureSize;
         uniform bool uEnableBreathing;
         uniform float uBreathingAmplitude;
         uniform float uBreathingFrequency;
+        uniform bool uEnableSpeedBasedSize;
+        uniform float uSpeedBasedSizeFactor;
+        uniform float uMaxSpeed;
+        uniform float uPerspectiveScale;
         uniform float uTime;
         attribute vec3 color;
         varying vec3 vColor;
@@ -554,16 +584,27 @@ export class GPGUParticleSystem {
 
           vec4 mvPosition = modelViewMatrix * vec4(posData.rgb, 1.0);
 
-          // 计算基础点大小，随距离衰减
-          float basePointSize = uSize * (300.0 / -mvPosition.z);
+          // 计算基础点大小，使用透视衰减系数实现近大远小效果
+          float basePointSize = uSize * uPerspectiveScale / -mvPosition.z;
 
-          // 如果启用呼吸效果，应用正弦波变化
+          // 应用呼吸效果
+          float breathingFactor = 1.0;
           if (uEnableBreathing) {
-            float breathingFactor = sin(uTime * uBreathingFrequency * 6.28318);
-            gl_PointSize = basePointSize * (1.0 + uBreathingAmplitude * breathingFactor);
-          } else {
-            gl_PointSize = basePointSize;
+            breathingFactor = 1.0 + uBreathingAmplitude * sin(uTime * uBreathingFrequency * 6.28318);
           }
+
+          // 应用基于速度的大小变化
+          float speedFactor = 1.0;
+          if (uEnableSpeedBasedSize) {
+            // 从速度纹理读取速度
+            vec4 velData = texture2D(tVelocity, uv);
+            float speed = length(velData.rgb);
+            // 归一化速度到 [0, 1]
+            speedFactor = 1.0 + min(speed / uMaxSpeed, 1.0) * uSpeedBasedSizeFactor;
+          }
+
+          // 组合所有大小因子
+          gl_PointSize = basePointSize * breathingFactor * speedFactor;
 
           gl_Position = projectionMatrix * mvPosition;
         }
@@ -632,25 +673,34 @@ export class GPGUParticleSystem {
       // 执行 GPU 计算
       this.gpgpu.compute()
 
-      // 更新位置纹理到渲染材质
-      if (this.positionVariable && this.points.material instanceof THREE.ShaderMaterial) {
+      // 更新位置和速度纹理到渲染材质
+      if (this.positionVariable && this.velocityVariable && this.points.material instanceof THREE.ShaderMaterial) {
         const positionTarget = this.gpgpu.getCurrentRenderTarget(this.positionVariable)
-        const texture = positionTarget.texture
+        const velocityTarget = this.gpgpu.getCurrentRenderTarget(this.velocityVariable)
+        const positionTexture = positionTarget.texture
+        const velocityTexture = velocityTarget.texture
 
         // 确保纹理正确配置用于渲染
-        texture.minFilter = THREE.NearestFilter
-        texture.magFilter = THREE.NearestFilter
-        texture.wrapS = THREE.ClampToEdgeWrapping
-        texture.wrapT = THREE.ClampToEdgeWrapping
-        texture.needsUpdate = true
+        positionTexture.minFilter = THREE.NearestFilter
+        positionTexture.magFilter = THREE.NearestFilter
+        positionTexture.wrapS = THREE.ClampToEdgeWrapping
+        positionTexture.wrapT = THREE.ClampToEdgeWrapping
+        positionTexture.needsUpdate = true
 
-        this.points.material.uniforms.tPosition.value = texture
+        velocityTexture.minFilter = THREE.NearestFilter
+        velocityTexture.magFilter = THREE.NearestFilter
+        velocityTexture.wrapS = THREE.ClampToEdgeWrapping
+        velocityTexture.wrapT = THREE.ClampToEdgeWrapping
+        velocityTexture.needsUpdate = true
+
+        this.points.material.uniforms.tPosition.value = positionTexture
+        this.points.material.uniforms.tVelocity.value = velocityTexture
 
         // 更新呼吸效果 uniforms
         if (this.config.enableBreathing) {
           this.points.material.uniforms.uTime.value = time
         }
-        
+
         // 强制标记材质需要更新
         this.points.material.needsUpdate = true
 
@@ -658,9 +708,10 @@ export class GPGUParticleSystem {
         if (!this.updateCount) {
           this.updateCount = 1
           console.log('[GPGUParticleSystem] 首次更新完成', {
-            texture: texture,
-            textureWidth: texture.image.width,
-            textureHeight: texture.image.height,
+            positionTexture: positionTexture,
+            velocityTexture: velocityTexture,
+            textureWidth: positionTexture.image.width,
+            textureHeight: positionTexture.image.height,
             uniformValue: this.points.material.uniforms.tPosition.value !== null,
             materialCompiled: this.points.material.vertexShader !== null
           })
@@ -669,9 +720,10 @@ export class GPGUParticleSystem {
         // 首次渲染时记录日志
         if (this.firstRender) {
           console.log('[GPGUParticleSystem] 首次渲染更新', {
-            hasTexture: texture !== null,
+            hasPositionTexture: positionTexture !== null,
+            hasVelocityTexture: velocityTexture !== null,
             uniformSet: this.points.material.uniforms.tPosition.value !== null,
-            textureSize: { width: texture.image.width, height: texture.image.height }
+            textureSize: { width: positionTexture.image.width, height: positionTexture.image.height }
           })
           this.firstRender = false
         }
