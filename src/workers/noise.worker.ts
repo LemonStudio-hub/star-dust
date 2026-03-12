@@ -139,7 +139,7 @@ self.addEventListener('message', (event) => {
       success: true,
       data: data.buffer,
       elapsed: elapsed
-    }, [data.buffer])
+    }, { transfer: [data.buffer] as any })
   } catch (error) {
     console.error('[Worker] 预计算失败:', error)
     self.postMessage({

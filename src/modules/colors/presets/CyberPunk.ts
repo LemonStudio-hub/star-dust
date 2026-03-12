@@ -22,7 +22,7 @@ export const CyberPunkTheme: ColorTheme = {
     { color: [0.0, 1.0, 1.0], position: 0.5 },  // 青色
     { color: [0.5, 0.0, 1.0], position: 1.0 },  // 紫色
   ],
-  gradientType: 'cycle',
+  gradientType: 'random',
   animationType: 'cycle',
   animationSpeed: 0.5
 }

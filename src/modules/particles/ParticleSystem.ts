@@ -8,9 +8,9 @@
  */
 
 import * as THREE from 'three'
-import { NoiseTexture, NoiseVector } from '../noise/NoiseTexture'
-import { ColorManager, ColorTheme } from '../colors/ColorManager'
-import { DefaultColorTheme } from '../colors/ColorTheme'
+import { NoiseTexture } from '../noise/NoiseTexture'
+import { ColorManager } from '../colors/ColorManager'
+import { ColorTheme, DefaultColorTheme } from '../colors/ColorTheme'
 import { TrailManager, TrailConfig } from './TrailManager'
 
 /**
@@ -720,7 +720,7 @@ export class ParticleSystem {
 
       scene.remove(this.points)
       this.points.geometry.dispose()
-      this.points.material.dispose()
+      ;(this.points.material as THREE.Material).dispose()
 
       // 显式释放内存
       if (this.positions) {

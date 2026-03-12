@@ -15,10 +15,7 @@
 import {
   ColorTheme,
   ColorStop,
-  GradientType,
-  AnimationType,
-  ColorConfig,
-  DefaultColorTheme
+  ColorConfig
 } from './ColorTheme'
 
 /**

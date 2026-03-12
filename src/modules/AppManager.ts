@@ -14,7 +14,8 @@ import { GPGUParticleSystem, GPGUParticleConfig } from './particles/GPGUParticle
 import { TrailConfig } from './particles/TrailManager'
 import { MouseInteraction, TouchInteraction, GestureHandler } from './interaction'
 import { Renderer, RendererConfig } from './renderer/Renderer'
-import { ColorManager, ColorTheme } from './colors/ColorTheme'
+import { ColorManager } from './colors/ColorManager'
+import { ColorTheme } from './colors/ColorTheme'
 import { PositionBasedTheme } from './colors/presets/PositionBased'
 
 /**
@@ -90,7 +91,19 @@ const VALIDATION_RULES: Record<keyof AppConfig, ValidationRule> = {
   particleSize: { min: 0.1, max: 10, name: '粒子大小' },
   boundsRadius: { min: 5, max: 500, name: '边界半径' },
   velocityScale: { min: 0.001, max: 2, name: '速度缩放' },
-  maxSpeed: { min: 0.001, max: 5, name: '最大速度' }
+  maxSpeed: { min: 0.001, max: 5, name: '最大速度' },
+  enableTrails: { min: 0, max: 1, name: '启用轨迹' },
+  trailConfig: { min: 0, max: 1, name: '轨迹配置' },
+  useGPGPU: { min: 0, max: 1, name: '使用 GPGPU' },
+  enableParticleBreathing: { min: 0, max: 1, name: '启用呼吸效果' },
+  breathingAmplitude: { min: 0, max: 1, name: '呼吸振幅' },
+  breathingFrequency: { min: 0.1, max: 10, name: '呼吸频率' },
+  enableSpeedBasedSize: { min: 0, max: 1, name: '启用速度影响大小' },
+  speedBasedSizeFactor: { min: 0, max: 2, name: '速度影响因子' },
+  parallaxStrength: { min: 0, max: 2, name: '视差强度' },
+  enableFog: { min: 0, max: 1, name: '启用雾效' },
+  fogDensity: { min: 0, max: 0.1, name: '雾效浓度' },
+  fogColor: { min: 0, max: 1, name: '雾效颜色' }
 }
 
 /**
@@ -109,17 +122,17 @@ const VALIDATION_RULES: Record<keyof AppConfig, ValidationRule> = {
  */
 export class AppManager {
   /** 噪声纹理 */
-  private noiseTexture: NoiseTexture
+  private noiseTexture!: NoiseTexture
   /** 粒子系统（CPU 或 GPU） */
-  private particleSystem: ParticleSystem | GPGUParticleSystem
+  private particleSystem!: ParticleSystem | GPGUParticleSystem
   /** 鼠标交互 */
-  private mouseInteraction: MouseInteraction
+  private mouseInteraction!: MouseInteraction
   /** 触摸交互 */
-  private touchInteraction: TouchInteraction
+  private touchInteraction!: TouchInteraction
   /** 手势处理器 */
-  private gestureHandler: GestureHandler
+  private gestureHandler!: GestureHandler
   /** 渲染器 */
-  private renderer: Renderer
+  private renderer!: Renderer
   /** 容器元素 */
   private container: HTMLElement
   /** Canvas 元素 */
@@ -145,7 +158,7 @@ export class AppManager {
   /** 性能更新间隔（毫秒） */
   private perfUpdateInterval: number = 500
   /** 动画帧 ID */
-  private animationFrameId: number
+  private animationFrameId!: number
   /** 保存的配置（用于上下文恢复） */
   private savedConfig: AppConfig | null = null
 

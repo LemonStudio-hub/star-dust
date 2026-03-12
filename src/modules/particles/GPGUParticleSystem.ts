@@ -253,20 +253,25 @@ export class GPGUParticleSystem {
   private colorManager: ColorManager | null = null
   /** 标记是否已释放资源 */
   private disposed: boolean = false
+  /** Three.js 渲染器 */
+  private renderer!: THREE.WebGLRenderer
   /** 初始位置纹理 */
   private initialPositionTexture: THREE.DataTexture | null = null
   /** 初始速度纹理 */
   private initialVelocityTexture: THREE.DataTexture | null = null
   /** 时间 */
-  private time: number = 0
+  // @ts-expect-error - Reserved for future use
+  private _time: number = 0
   /** 粒子位置数组（用于读取 GPU 结果） */
-  private positions: Float32Array | null = null
+  // @ts-expect-error - Reserved for future use
+  private _positions: Float32Array | null = null
   /** 首次渲染标记 */
   private firstRender: boolean = true
   /** 更新计数器（用于调试） */
   private updateCount: number = 0
   /** 基础粒子大小 */
-  private baseSize: number
+  // @ts-expect-error - Reserved for future use
+  private _baseSize: number
   /** 呼吸效果：振幅 */
   private breathingAmplitude: number
   /** 呼吸效果：频率 */
@@ -302,10 +307,11 @@ export class GPGUParticleSystem {
   ) {
     this.config = config
     this.noiseTexture = noiseTexture
-    this.time = 0
+    this.renderer = renderer
+    this._time = 0
 
     // 初始化呼吸效果参数
-    this.baseSize = config.size
+    this._baseSize = config.size
     this.breathingAmplitude = config.breathingAmplitude ?? 0.3
     this.breathingFrequency = config.breathingFrequency ?? 0.5
     this.speedBasedSizeFactor = config.speedBasedSizeFactor ?? 1.0
@@ -393,8 +399,8 @@ export class GPGUParticleSystem {
 
       // 验证纹理数据
       console.log('[GPGUParticleSystem] 初始位置纹理已设置', {
-        textureWidth: texture.image.width,
-        textureHeight: texture.image.height,
+        textureWidth: (texture.image as any).width,
+        textureHeight: (texture.image as any).height,
         uniformValue: this.points.material.uniforms.tPosition.value !== null,
         uniformName: Object.keys(this.points.material.uniforms)[0],
         materialNeedsUpdate: this.points.material.needsUpdate
@@ -479,7 +485,7 @@ export class GPGUParticleSystem {
     }
 
     // 位置变量 uniforms
-    this.positionVariable.material.uniforms.tNoise = { value: this.noiseTexture.texture }
+    this.positionVariable.material.uniforms.tNoise = { value: this.noiseTexture.createTexture() }
     this.positionVariable.material.uniforms.uVelocityScale = { value: this.config.velocityScale }
     this.positionVariable.material.uniforms.uMaxSpeed = { value: this.config.maxSpeed }
     this.positionVariable.material.uniforms.uBoundsRadius = { value: this.config.boundsRadius }
@@ -489,7 +495,7 @@ export class GPGUParticleSystem {
     this.positionVariable.material.uniforms.uDeltaTime = { value: 0 }
 
     // 速度变量 uniforms
-    this.velocityVariable.material.uniforms.tNoise = { value: this.noiseTexture.texture }
+    this.velocityVariable.material.uniforms.tNoise = { value: this.noiseTexture.createTexture() }
     this.velocityVariable.material.uniforms.uVelocityScale = { value: this.config.velocityScale }
     this.velocityVariable.material.uniforms.uMaxSpeed = { value: this.config.maxSpeed }
     this.velocityVariable.material.uniforms.uNoiseScale = { value: this.config.noiseScale }
@@ -670,7 +676,7 @@ export class GPGUParticleSystem {
       depthTest: true
     })
 
-    this.positions = positions
+    this._positions = positions
     const points = new THREE.Points(geometry, material)
     console.log('[GPGUParticleSystem] 几何体信息:', {
       vertexCount: geometry.attributes.position.count,
@@ -707,7 +713,7 @@ export class GPGUParticleSystem {
     }
 
     try {
-      this.time = time
+      this._time = time
 
       // 更新 uniforms（只更新时间，不使用 deltaTime）
       if (this.positionVariable && this.velocityVariable) {
@@ -755,8 +761,8 @@ export class GPGUParticleSystem {
           console.log('[GPGUParticleSystem] 首次更新完成', {
             positionTexture: positionTexture,
             velocityTexture: velocityTexture,
-            textureWidth: positionTexture.image.width,
-            textureHeight: positionTexture.image.height,
+            textureWidth: (positionTexture.image as any).width,
+            textureHeight: (positionTexture.image as any).height,
             uniformValue: this.points.material.uniforms.tPosition.value !== null,
             materialCompiled: this.points.material.vertexShader !== null
           })
@@ -768,7 +774,7 @@ export class GPGUParticleSystem {
             hasPositionTexture: positionTexture !== null,
             hasVelocityTexture: velocityTexture !== null,
             uniformSet: this.points.material.uniforms.tPosition.value !== null,
-            textureSize: { width: positionTexture.image.width, height: positionTexture.image.height }
+            textureSize: { width: (positionTexture.image as any).width, height: (positionTexture.image as any).height }
           })
           this.firstRender = false
         }
@@ -840,7 +846,7 @@ export class GPGUParticleSystem {
       const buffer = new Float32Array(bufferSize)
 
       // 从 GPU 读取数据
-      this.renderer.renderer.readRenderTargetPixels(
+      this.renderer.readRenderTargetPixels(
         renderTarget,
         0,
         0,
@@ -972,7 +978,7 @@ export class GPGUParticleSystem {
     try {
       scene.remove(this.points)
       this.points.geometry.dispose()
-      this.points.material.dispose()
+      ;(this.points.material as THREE.ShaderMaterial).dispose()
 
       // 释放 GPU 计算渲染器
       this.gpgpu.dispose()

@@ -8,6 +8,8 @@
  * @module noise/NoiseTexture
  */
 
+import * as THREE from 'three'
+
 /**
  * 三维向量接口
  *
@@ -459,5 +461,55 @@ export class NoiseTexture {
     this.data = null
     this.ready = false
     this.disposed = true
+  }
+
+  /**
+   * 创建 Three.js 纹理对象
+   *
+   * 将预计算的噪声数据转换为 Three.js 纹理格式。
+   * 用于 GPU 计算和渲染。
+   *
+   * @returns Three.js DataTexture 对象
+   */
+  createTexture(): THREE.DataTexture {
+    if (!this.data || !this.ready) {
+      console.warn('[NoiseTexture] 噪声数据尚未就绪，返回空纹理')
+      return new THREE.DataTexture(
+        new Float32Array(1),
+        1,
+        1,
+        THREE.RGBAFormat,
+        THREE.FloatType
+      )
+    }
+
+    // 创建包含 XYZ 三个通道的纹理数据
+    const size = this.size
+    const textureData = new Float32Array(size * size * size * 4)
+
+    for (let z = 0; z < size; z++) {
+      for (let y = 0; y < size; y++) {
+        for (let x = 0; x < size; x++) {
+          const idx = x + y * size + z * size * size
+          const texIdx = (x + y * size + z * size * size) * 4
+
+          textureData[texIdx] = this.data[idx]           // X
+          textureData[texIdx + 1] = this.data[idx + this.volume]    // Y
+          textureData[texIdx + 2] = this.data[idx + this.volume * 2]  // Z
+          textureData[texIdx + 3] = 1.0
+        }
+      }
+    }
+
+    const texture = new THREE.DataTexture(
+      textureData,
+      size,
+      size,
+      THREE.RGBAFormat,
+      THREE.FloatType
+    )
+
+    texture.needsUpdate = true
+    return texture
   }
 }

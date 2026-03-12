@@ -133,13 +133,13 @@ export class TrailManager {
   /** 标记是否已释放资源 */
   private disposed: boolean = false
   /** 轨迹几何体 */
-  private geometry: THREE.BufferGeometry
+  private geometry!: THREE.BufferGeometry
   /** 轨迹材质 */
-  private material: THREE.ShaderMaterial
+  private material!: THREE.ShaderMaterial
   /** 轨迹顶点位置数组 */
-  private positions: Float32Array
+  private positions!: Float32Array
   /** 轨迹顶点年龄数组 */
-  private ages: Float32Array
+  private ages!: Float32Array
   /** 粒子数量 */
   private particleCount: number
 

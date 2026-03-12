@@ -82,7 +82,7 @@ export class Renderer {
     const canvas = this.renderer.domElement
 
     // 监听上下文丢失事件
-    canvas.addEventListener('webglcontextlost', (event) => {
+    canvas.addEventListener('webglcontextlost', (event: Event) => {
       event.preventDefault()
       console.warn('WebGL 上下文丢失')
       if (this.onContextLostCallback) {

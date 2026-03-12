@@ -11,32 +11,6 @@ import * as THREE from 'three'
 import Hammer from 'hammerjs'
 
 /**
- * 辅助函数：将客户端坐标归一化并转换为旋转角度
- *
- * @param clientX - 客户端 X 坐标
- * @param clientY - 客户端 Y 坐标
- * @param container - 容器元素
- * @returns 归一化的旋转角度 {x, y}
- */
-function normalizeToRotation(
-  clientX: number,
-  clientY: number,
-  container: HTMLElement
-): { x: number; y: number } {
-  const rect = container.getBoundingClientRect()
-
-  // 归一化到 [-1, 1] 范围
-  const normalizedX = ((clientX - rect.left) / rect.width) * 2 - 1
-  const normalizedY = -((clientY - rect.top) / rect.height) * 2 + 1
-
-  // 映射到旋转角度
-  return {
-    x: normalizedY * Math.PI * 0.5,
-    y: normalizedX * Math.PI * 0.5
-  }
-}
-
-/**
  * 鼠标交互处理器
  *
  * 监听鼠标移动事件，将鼠标移动转换为旋转增量。
@@ -251,7 +225,7 @@ export class TouchInteraction {
    */
 export class GestureHandler {
   /** Hammer.js 手势管理器 */
-  private hammer: Hammer.Manager
+  private hammer!: any
   /** 目标旋转角度 */
   private targetRotation: THREE.Vector2
   /** 旋转回调函数 */
@@ -296,8 +270,8 @@ export class GestureHandler {
    */
   private setup(): void {
     // 创建手势识别器
-    const pan = new Hammer.Pan()
-    const pinch = new Hammer.Pinch()
+    const pan = new (Hammer as any).Pan()
+    const pinch = new (Hammer as any).Pinch()
 
     // 添加到管理器
     this.hammer.add(pan)
@@ -306,7 +280,7 @@ export class GestureHandler {
     let lastScale = 1
 
     // 处理拖拽手势
-    this.hammer.on('pan', (e) => {
+    this.hammer.on('pan', (e: any) => {
       const deltaX = e.deltaX * 0.005
       const deltaY = e.deltaY * 0.005
 
@@ -317,7 +291,7 @@ export class GestureHandler {
     })
 
     // 处理缩放手势
-    this.hammer.on('pinch', (e) => {
+    this.hammer.on('pinch', (e: any) => {
       const scale = e.scale / lastScale
       lastScale = e.scale
 

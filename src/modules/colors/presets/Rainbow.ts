@@ -26,7 +26,7 @@ export const RainbowTheme: ColorTheme = {
     { color: [0.0, 0.0, 1.0], position: 0.833 }, // 蓝
     { color: [0.5, 0.0, 1.0], position: 1.0 },   // 紫
   ],
-  gradientType: 'cycle',
+  gradientType: 'linear',
   animationType: 'cycle',
   animationSpeed: 0.6
 }
