@@ -280,6 +280,74 @@
                 class="control-slider"
               >
             </div>
+
+            <!-- 泛光效果开关 -->
+            <div class="control-group">
+              <label class="control-label">
+                <span class="label-text">泛光效果</span>
+                <span class="label-value">{{ bloomConfig.enabled ? '开启' : '关闭' }}</span>
+              </label>
+              <div class="toggle-switch">
+                <input 
+                  type="checkbox" 
+                  v-model="bloomConfig.enabled" 
+                  @change="updateBloomConfig"
+                  class="toggle-checkbox"
+                >
+                <span class="toggle-slider"></span>
+              </div>
+            </div>
+
+            <!-- 泛光强度 -->
+            <div class="control-group" v-if="bloomConfig.enabled">
+              <label class="control-label">
+                <span class="label-text">泛光强度</span>
+                <span class="label-value">{{ bloomConfig.strength.toFixed(2) }}</span>
+              </label>
+              <input 
+                type="range" 
+                v-model.number="bloomConfig.strength" 
+                min="0" 
+                max="3" 
+                step="0.1"
+                @input="updateBloomConfig"
+                class="control-slider"
+              >
+            </div>
+
+            <!-- 泛光半径 -->
+            <div class="control-group" v-if="bloomConfig.enabled">
+              <label class="control-label">
+                <span class="label-text">泛光半径</span>
+                <span class="label-value">{{ bloomConfig.radius.toFixed(2) }}</span>
+              </label>
+              <input 
+                type="range" 
+                v-model.number="bloomConfig.radius" 
+                min="0" 
+                max="1" 
+                step="0.05"
+                @input="updateBloomConfig"
+                class="control-slider"
+              >
+            </div>
+
+            <!-- 泛光阈值 -->
+            <div class="control-group" v-if="bloomConfig.enabled">
+              <label class="control-label">
+                <span class="label-text">泛光阈值</span>
+                <span class="label-value">{{ bloomConfig.threshold.toFixed(2) }}</span>
+              </label>
+              <input 
+                type="range" 
+                v-model.number="bloomConfig.threshold" 
+                min="0" 
+                max="1" 
+                step="0.05"
+                @input="updateBloomConfig"
+                class="control-slider"
+              >
+            </div>
           </div>
 
           <div class="dashboard-footer">
@@ -375,6 +443,7 @@ const saveConfigToStorage = (): void => {
   try {
     const configToSave = {
       ...particleConfig,
+      bloom: { ...bloomConfig },
       themeName: currentTheme.value.name,
       savedAt: new Date().toISOString()
     }
@@ -401,6 +470,15 @@ const loadConfigFromStorage = (): void => {
           (particleConfig as any)[key] = config[key]
         }
       })
+
+      // 恢复泛光配置
+      if (config.bloom) {
+        Object.keys(bloomConfig).forEach(key => {
+          if (config.bloom[key] !== undefined) {
+            (bloomConfig as any)[key] = config.bloom[key]
+          }
+        })
+      }
 
       // 恢复主题配置
       if (config.themeName) {
@@ -433,6 +511,16 @@ const clearConfigStorage = (): void => {
  * 粒子配置参数
  */
 const particleConfig = reactive({ ...defaultConfig })
+
+/**
+ * 泛光效果配置
+ */
+const bloomConfig = reactive({
+  enabled: true,
+  strength: 1.5,
+  radius: 0.4,
+  threshold: 0.85
+})
 
 /**
  * 性能监控数据
@@ -550,15 +638,37 @@ const updateParticleConfig = (): void => {
 }
 
 /**
+ * 更新泛光配置
+ */
+const updateBloomConfig = (): void => {
+  if (appManager) {
+    appManager.setBloomConfig({
+      enabled: bloomConfig.enabled,
+      strength: bloomConfig.strength,
+      radius: bloomConfig.radius,
+      threshold: bloomConfig.threshold
+    })
+    // 自动保存配置到 localStorage
+    saveConfigToStorage()
+  }
+}
+
+/**
  * 重置配置为默认值
  */
 const resetConfig = (): void => {
   Object.assign(particleConfig, defaultConfig)
+  // 重置泛光配置为默认
+  bloomConfig.enabled = true
+  bloomConfig.strength = 1.5
+  bloomConfig.radius = 0.4
+  bloomConfig.threshold = 0.85
   // 重置主题为默认
   currentTheme.value = presetThemes[0]
   // 清除 localStorage 中的配置
   clearConfigStorage()
   updateParticleConfig()
+  updateBloomConfig()
 }
 
 /**

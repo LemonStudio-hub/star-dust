@@ -8,6 +8,7 @@
  */
 
 import * as THREE from 'three'
+import { PostProcessingManager } from './PostProcessingManager'
 
 /**
  * 渲染器配置接口
@@ -36,6 +37,7 @@ export interface RendererConfig {
  * - 添加光照
  * - 处理窗口大小调整
  * - 处理 WebGL 上下文丢失和恢复
+ * - 管理后处理效果（泛光等）
  * 
  * @class Renderer
  */
@@ -46,6 +48,8 @@ export class Renderer {
   public scene: THREE.Scene
   /** 透视相机实例 */
   public camera: THREE.PerspectiveCamera
+  /** 后处理管理器实例 */
+  public postProcessing: PostProcessingManager
   /** 上下文丢失回调 */
   private onContextLostCallback: (() => void) | null = null
   /** 上下文恢复回调 */
@@ -71,6 +75,15 @@ export class Renderer {
     this.renderer = this.createRenderer(config)
     this.setupLights()
     this.setupContextHandlers()
+    
+    // 初始化后处理管理器
+    this.postProcessing = new PostProcessingManager(
+      this.renderer,
+      this.scene,
+      this.camera,
+      config.width,
+      config.height
+    )
   }
 
   /**
@@ -219,12 +232,15 @@ export class Renderer {
     
     // 更新渲染器大小
     this.renderer.setSize(width, height)
+    
+    // 更新后处理管理器大小
+    this.postProcessing.resize(width, height)
   }
 
   /**
    * 渲染场景
    * 
-   * 渲染当前场景和相机视角。
+   * 渲染当前场景和相机视角，使用后处理效果。
    * 
    * @example
    * ```typescript
@@ -232,6 +248,21 @@ export class Renderer {
    * ```
    */
   render(): void {
+    // 使用后处理管理器渲染（包含泛光效果）
+    this.postProcessing.render()
+  }
+
+  /**
+   * 直接渲染场景（不使用后处理）
+   * 
+   * 仅渲染基础场景，不应用任何后处理效果。
+   * 
+   * @example
+   * ```typescript
+   * renderer.renderDirect();
+   * ```
+   */
+  renderDirect(): void {
     this.renderer.render(this.scene, this.camera)
   }
 
@@ -241,6 +272,7 @@ export class Renderer {
    * 释放渲染器相关的资源，包括上下文和缓冲区。
    */
   dispose(): void {
+    this.postProcessing.dispose()
     this.renderer.dispose()
   }
 }

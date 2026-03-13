@@ -14,6 +14,7 @@ import { GPGUParticleSystem, GPGUParticleConfig } from './particles/GPGUParticle
 import { TrailConfig } from './particles/TrailManager'
 import { MouseInteraction, TouchInteraction, GestureHandler } from './interaction'
 import { Renderer, RendererConfig } from './renderer/Renderer'
+import { BloomConfig } from './renderer/PostProcessingManager'
 import { ColorManager } from './colors/ColorManager'
 import { ColorTheme } from './colors/ColorTheme'
 import { PositionBasedTheme } from './colors/presets/PositionBased'
@@ -779,6 +780,109 @@ export class AppManager {
     if (colorManager) {
       colorManager.setAnimationEnabled(enabled)
     }
+  }
+
+  /**
+   * 设置泛光效果配置
+   *
+   * @param config - 泛光配置
+   * 
+   * @example
+   * ```typescript
+   * appManager.setBloomConfig({
+   *   enabled: true,
+   *   strength: 2.0,
+   *   radius: 0.5,
+   *   threshold: 0.8
+   * });
+   * ```
+   */
+  setBloomConfig(config: Partial<BloomConfig>): void {
+    this.renderer.postProcessing.setBloomConfig(config)
+  }
+
+  /**
+   * 获取泛光效果配置
+   *
+   * @returns 当前泛光配置
+   */
+  getBloomConfig(): BloomConfig {
+    return this.renderer.postProcessing.getBloomConfig()
+  }
+
+  /**
+   * 启用泛光效果
+   *
+   * @example
+   * ```typescript
+   * appManager.enableBloom();
+   * ```
+   */
+  enableBloom(): void {
+    this.setBloomConfig({ enabled: true })
+  }
+
+  /**
+   * 禁用泛光效果
+   *
+   * @example
+   * ```typescript
+   * appManager.disableBloom();
+   * ```
+   */
+  disableBloom(): void {
+    this.setBloomConfig({ enabled: false })
+  }
+
+  /**
+   * 检查泛光效果是否启用
+   *
+   * @returns 是否启用泛光
+   */
+  isBloomEnabled(): boolean {
+    return this.getBloomConfig().enabled
+  }
+
+  /**
+   * 设置泛光强度
+   *
+   * @param strength - 泛光强度（推荐值：0-3）
+   * 
+   * @example
+   * ```typescript
+   * appManager.setBloomStrength(2.0);
+   * ```
+   */
+  setBloomStrength(strength: number): void {
+    this.setBloomConfig({ strength })
+  }
+
+  /**
+   * 设置泛光半径
+   *
+   * @param radius - 泛光半径（推荐值：0-1）
+   * 
+   * @example
+   * ```typescript
+   * appManager.setBloomRadius(0.5);
+   * ```
+   */
+  setBloomRadius(radius: number): void {
+    this.setBloomConfig({ radius })
+  }
+
+  /**
+   * 设置泛光阈值
+   *
+   * @param threshold - 泛光阈值（推荐值：0-1）
+   * 
+   * @example
+   * ```typescript
+   * appManager.setBloomThreshold(0.8);
+   * ```
+   */
+  setBloomThreshold(threshold: number): void {
+    this.setBloomConfig({ threshold })
   }
 
   /**

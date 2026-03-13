@@ -105,6 +105,68 @@
       </label>
     </div>
 
+    <!-- 泛光效果控制 -->
+    <div class="control-group">
+      <label class="control-label">
+        <span class="label-text">泛光效果</span>
+        <div class="toggle-switch" @click="toggleBloom">
+          <div class="toggle-slider" :class="{ active: bloomEnabled }"></div>
+        </div>
+      </label>
+      <transition name="expand">
+        <div v-if="bloomEnabled" class="bloom-controls">
+          <!-- 泛光强度 -->
+          <div class="bloom-control-item">
+            <div class="bloom-control-label">
+              <span class="bloom-label-text">强度</span>
+              <span class="bloom-label-value">{{ bloomStrength.toFixed(2) }}</span>
+            </div>
+            <input
+              type="range"
+              :value="bloomStrength"
+              @input="updateBloomStrength"
+              min="0"
+              max="3"
+              step="0.1"
+              class="control-slider"
+            >
+          </div>
+          <!-- 泛光半径 -->
+          <div class="bloom-control-item">
+            <div class="bloom-control-label">
+              <span class="bloom-label-text">半径</span>
+              <span class="bloom-label-value">{{ bloomRadius.toFixed(2) }}</span>
+            </div>
+            <input
+              type="range"
+              :value="bloomRadius"
+              @input="updateBloomRadius"
+              min="0"
+              max="1"
+              step="0.05"
+              class="control-slider"
+            >
+          </div>
+          <!-- 泛光阈值 -->
+          <div class="bloom-control-item">
+            <div class="bloom-control-label">
+              <span class="bloom-label-text">阈值</span>
+              <span class="bloom-label-value">{{ bloomThreshold.toFixed(2) }}</span>
+            </div>
+            <input
+              type="range"
+              :value="bloomThreshold"
+              @input="updateBloomThreshold"
+              min="0"
+              max="1"
+              step="0.05"
+              class="control-slider"
+            >
+          </div>
+        </div>
+      </transition>
+    </div>
+
     <!-- 配置导入/导出 -->
     <div class="control-group">
       <label class="control-label">
@@ -140,6 +202,8 @@ interface AppManager {
   setColorTheme(theme: ColorTheme): void
   setColorAnimationSpeedMultiplier(multiplier: number): void
   setColorAnimationEnabled(enabled: boolean): void
+  setBloomConfig(config: { enabled?: boolean; strength?: number; radius?: number; threshold?: number }): void
+  getBloomConfig(): { enabled: boolean; strength: number; radius: number; threshold: number }
   exportConfig(): string
   importConfig(configJson: string): boolean
 }
@@ -154,6 +218,12 @@ const currentThemeName = ref('默认')
 const animationEnabled = ref(true)
 const animationSpeed = ref(0.5)
 const showColorEditor = ref(false)
+
+// 泛光效果状态
+const bloomEnabled = ref(true)
+const bloomStrength = ref(1.5)
+const bloomRadius = ref(0.4)
+const bloomThreshold = ref(0.85)
 
 const themes = PRESET_THEMES
 
@@ -184,6 +254,38 @@ const toggleAnimation = (): void => {
   animationEnabled.value = !animationEnabled.value
   if (props.appManager) {
     props.appManager.setColorAnimationEnabled(animationEnabled.value)
+  }
+}
+
+// 泛光效果控制方法
+const toggleBloom = (): void => {
+  bloomEnabled.value = !bloomEnabled.value
+  if (props.appManager) {
+    props.appManager.setBloomConfig({ enabled: bloomEnabled.value })
+  }
+}
+
+const updateBloomStrength = (event: Event): void => {
+  const target = event.target as HTMLInputElement
+  bloomStrength.value = parseFloat(target.value)
+  if (props.appManager) {
+    props.appManager.setBloomConfig({ strength: bloomStrength.value })
+  }
+}
+
+const updateBloomRadius = (event: Event): void => {
+  const target = event.target as HTMLInputElement
+  bloomRadius.value = parseFloat(target.value)
+  if (props.appManager) {
+    props.appManager.setBloomConfig({ radius: bloomRadius.value })
+  }
+}
+
+const updateBloomThreshold = (event: Event): void => {
+  const target = event.target as HTMLInputElement
+  bloomThreshold.value = parseFloat(target.value)
+  if (props.appManager) {
+    props.appManager.setBloomConfig({ threshold: bloomThreshold.value })
   }
 }
 
@@ -658,5 +760,47 @@ const hexToRgb = (hex: string): [number, number, number] => {
 .expand-leave-from {
   max-height: 500px;
   opacity: 1;
+}
+
+.bloom-controls {
+  margin-top: 12px;
+  padding: 16px;
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.bloom-control-item {
+  margin-bottom: 16px;
+}
+
+.bloom-control-item:last-child {
+  margin-bottom: 0;
+}
+
+.bloom-control-label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.9);
+  font-weight: 500;
+}
+
+.bloom-label-text {
+  letter-spacing: 0.2px;
+}
+
+.bloom-label-value {
+  background: linear-gradient(135deg, rgba(236, 72, 153, 0.8) 0%, rgba(168, 85, 247, 0.8) 100%);
+  border-radius: 6px;
+  padding: 2px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #ffffff;
+  min-width: 40px;
+  text-align: center;
+  font-feature-settings: 'tnum' 1;
 }
 </style>
