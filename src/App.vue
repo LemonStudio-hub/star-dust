@@ -347,9 +347,15 @@ const CLICK_THRESHOLD = 500 // 三连击时间阈值（毫秒）
 const CLICK_COUNT = 3 // 需要的点击次数
 
 /**
- * 粒子配置参数
+ * localStorage 键名
  */
-const particleConfig = reactive({
+const STORAGE_KEY = 'xingchen-particle-config'
+const THEME_STORAGE_KEY = 'xingchen-theme-config'
+
+/**
+ * 默认配置（用于重置）
+ */
+const defaultConfig = {
   particleCount: 40000,
   particleSize: 1.0,
   boundsRadius: 60,
@@ -360,12 +366,73 @@ const particleConfig = reactive({
   parallaxStrength: 1.0,
   enableFog: true,
   fogDensity: 0.01
-})
+}
 
 /**
- * 默认配置（用于重置）
+ * 保存配置到 localStorage
  */
-const defaultConfig = { ...particleConfig }
+const saveConfigToStorage = (): void => {
+  try {
+    const configToSave = {
+      ...particleConfig,
+      themeName: currentTheme.value.name,
+      savedAt: new Date().toISOString()
+    }
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(configToSave))
+    console.log('[App.vue] 配置已保存到 localStorage')
+  } catch (error) {
+    console.error('[App.vue] 保存配置到 localStorage 失败:', error)
+  }
+}
+
+/**
+ * 从 localStorage 加载配置
+ */
+const loadConfigFromStorage = (): void => {
+  try {
+    const savedConfig = localStorage.getItem(STORAGE_KEY)
+    if (savedConfig) {
+      const config = JSON.parse(savedConfig)
+      console.log('[App.vue] 从 localStorage 加载配置:', config)
+
+      // 恢复粒子配置
+      Object.keys(particleConfig).forEach(key => {
+        if (config[key] !== undefined) {
+          (particleConfig as any)[key] = config[key]
+        }
+      })
+
+      // 恢复主题配置
+      if (config.themeName) {
+        const theme = presetThemes.find(t => t.name === config.themeName)
+        if (theme) {
+          currentTheme.value = theme
+        }
+      }
+
+      console.log('[App.vue] 配置加载成功')
+    }
+  } catch (error) {
+    console.error('[App.vue] 从 localStorage 加载配置失败:', error)
+  }
+}
+
+/**
+ * 清除 localStorage 中的配置
+ */
+const clearConfigStorage = (): void => {
+  try {
+    localStorage.removeItem(STORAGE_KEY)
+    console.log('[App.vue] 配置已从 localStorage 清除')
+  } catch (error) {
+    console.error('[App.vue] 清除 localStorage 配置失败:', error)
+  }
+}
+
+/**
+ * 粒子配置参数
+ */
+const particleConfig = reactive({ ...defaultConfig })
 
 /**
  * 性能监控数据
@@ -423,6 +490,8 @@ const changeTheme = (theme: ColorTheme): void => {
   if (appManager) {
     currentTheme.value = theme
     appManager.setColorTheme(theme)
+    // 保存主题配置到 localStorage
+    saveConfigToStorage()
   }
 }
 
@@ -475,6 +544,8 @@ const closeDashboard = (): void => {
 const updateParticleConfig = (): void => {
   if (appManager) {
     appManager.updateConfig(particleConfig)
+    // 自动保存配置到 localStorage
+    saveConfigToStorage()
   }
 }
 
@@ -483,6 +554,10 @@ const updateParticleConfig = (): void => {
  */
 const resetConfig = (): void => {
   Object.assign(particleConfig, defaultConfig)
+  // 重置主题为默认
+  currentTheme.value = presetThemes[0]
+  // 清除 localStorage 中的配置
+  clearConfigStorage()
   updateParticleConfig()
 }
 
@@ -577,9 +652,11 @@ const importConfig = (): void => {
         }
 
         const success = appManager.importConfig(text)
-        
+
         if (success) {
           console.log('[App.vue] 配置导入成功')
+          // 保存导入的配置到 localStorage
+          saveConfigToStorage()
           alert('配置导入成功！')
         } else {
           console.error('[App.vue] 配置导入失败')
@@ -646,6 +723,9 @@ onMounted(() => {
   }
 
   try {
+    // 从 localStorage 加载保存的配置
+    loadConfigFromStorage()
+
     // 初始化应用配置
     const config = {
       particleCount: particleConfig.particleCount,    // 粒子数量
