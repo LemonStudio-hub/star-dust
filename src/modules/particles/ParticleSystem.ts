@@ -643,7 +643,7 @@ export class ParticleSystem {
           const speedFactor = Math.min(speed / this.config.maxSpeed, 1.0)
 
           // 计算粒子大小：基础大小 * 呼吸因子 * (1 + 速度因子 * 影响因子)
-          this.sizes[i] = this.currentBreathingFactor * (1 + speedFactor * this.speedBasedSizeFactor)
+          this.sizes[i] = this.baseSize * this.currentBreathingFactor * (1 + speedFactor * this.speedBasedSizeFactor)
         }
 
         // 标记大小属性需要更新
@@ -777,6 +777,7 @@ export class ParticleSystem {
       // 更新粒子大小
       if (config.size !== undefined) {
         this.config.size = config.size
+        this.baseSize = config.size
         if (this.points.material instanceof THREE.PointsMaterial) {
           this.points.material.size = config.size
         }
