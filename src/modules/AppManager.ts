@@ -223,7 +223,10 @@ export class AppManager {
    */
   private validateConfig(config: AppConfig): void {
     for (const [key, value] of Object.entries(config)) {
-      if (key === 'useGPGPU' || key === 'enableTrails' || key === 'trailConfig') {
+      // 跳过布尔值和对象类型配置项
+      if (key === 'useGPGPU' || key === 'enableTrails' || key === 'trailConfig' ||
+          key === 'enableParticleBreathing' || key === 'enableSpeedBasedSize' ||
+          key === 'enableFog') {
         continue
       }
 
