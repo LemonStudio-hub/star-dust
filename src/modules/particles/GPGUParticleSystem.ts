@@ -88,8 +88,8 @@ void main() {
   // 边界检测
   float dist = length(pos);
   if (dist > uBoundsRadius) {
-    // 重置到中心附近
-    pos *= 0.1;
+    // 重置到中心附近，但保持一个最小距离
+    pos = normalize(pos) * (uBoundsRadius * 0.05 + 0.5);
 
     // 重置速度（与 CPU 模式保持一致：均匀随机分布，0.05 大小）
     vel = vec3(
@@ -392,29 +392,39 @@ export class GPGUParticleSystem {
     this.points = this.create(textureWidth, textureHeight)
     scene.add(this.points)
 
-    // 初始化：设置位置纹理到渲染材质
-    if (this.positionVariable && this.points.material instanceof THREE.ShaderMaterial) {
+    // 初始化：设置位置和速度纹理到渲染材质
+    if (this.positionVariable && this.velocityVariable && this.points.material instanceof THREE.ShaderMaterial) {
       const positionTarget = this.gpgpu.getCurrentRenderTarget(this.positionVariable)
-      const texture = positionTarget.texture
+      const velocityTarget = this.gpgpu.getCurrentRenderTarget(this.velocityVariable)
+      const positionTexture = positionTarget.texture
+      const velocityTexture = velocityTarget.texture
 
-      // 确保纹理正确配置
-      texture.minFilter = THREE.NearestFilter
-      texture.magFilter = THREE.NearestFilter
-      texture.wrapS = THREE.ClampToEdgeWrapping
-      texture.wrapT = THREE.ClampToEdgeWrapping
-      texture.needsUpdate = true
+      // 确保位置纹理正确配置
+      positionTexture.minFilter = THREE.NearestFilter
+      positionTexture.magFilter = THREE.NearestFilter
+      positionTexture.wrapS = THREE.ClampToEdgeWrapping
+      positionTexture.wrapT = THREE.ClampToEdgeWrapping
+      positionTexture.needsUpdate = true
 
-      this.points.material.uniforms.tPosition.value = texture
+      // 确保速度纹理正确配置
+      velocityTexture.minFilter = THREE.NearestFilter
+      velocityTexture.magFilter = THREE.NearestFilter
+      velocityTexture.wrapS = THREE.ClampToEdgeWrapping
+      velocityTexture.wrapT = THREE.ClampToEdgeWrapping
+      velocityTexture.needsUpdate = true
+
+      this.points.material.uniforms.tPosition.value = positionTexture
+      this.points.material.uniforms.tVelocity.value = velocityTexture
 
       // 强制标记材质需要更新，触发重新编译
       this.points.material.needsUpdate = true
 
       // 验证纹理数据
-      console.log('[GPGUParticleSystem] 初始位置纹理已设置', {
-        textureWidth: (texture.image as any).width,
-        textureHeight: (texture.image as any).height,
-        uniformValue: this.points.material.uniforms.tPosition.value !== null,
-        uniformName: Object.keys(this.points.material.uniforms)[0],
+      console.log('[GPGUParticleSystem] 初始纹理已设置', {
+        textureWidth: (positionTexture.image as any).width,
+        textureHeight: (positionTexture.image as any).height,
+        positionUniformValue: this.points.material.uniforms.tPosition.value !== null,
+        velocityUniformValue: this.points.material.uniforms.tVelocity.value !== null,
         materialNeedsUpdate: this.points.material.needsUpdate
       })
     }
@@ -425,6 +435,9 @@ export class GPGUParticleSystem {
     }
 
     console.log(`GPGUParticleSystem initialized with ${config.count} particles`)
+
+    // 执行一次初始更新，确保uniforms正确设置
+    this.update(0)
   }
 
   /**
@@ -453,6 +466,26 @@ export class GPGUParticleSystem {
       data[i4 + 3] = 1.0
     }
 
+    // 对于超出粒子数量的纹理像素，设置为远离中心的位置（确保不显示）
+    for (let i = this.config.count; i < width * height; i++) {
+      const i4 = i * 4
+      data[i4] = 0.0
+      data[i4 + 1] = 0.0
+      data[i4 + 2] = 0.0
+      data[i4 + 3] = 0.0
+    }
+
+    // 验证纹理数据
+    console.log('[GPGUParticleSystem] 初始位置纹理数据验证', {
+      count: this.config.count,
+      width,
+      height,
+      totalPixels: width * height,
+      firstPosition: [data[0], data[1], data[2]],
+      lastValidPosition: [data[(this.config.count - 1) * 4], data[(this.config.count - 1) * 4 + 1], data[(this.config.count - 1) * 4 + 2]],
+      boundsRadius: this.config.boundsRadius
+    })
+
     const texture = new THREE.DataTexture(data, width, height, THREE.RGBAFormat, THREE.FloatType)
     texture.needsUpdate = true
     return texture
@@ -479,6 +512,15 @@ export class GPGUParticleSystem {
       data[i4 + 1] = Math.sin(angle) * speed
       data[i4 + 2] = (Math.random() - 0.5) * speed
       data[i4 + 3] = 1.0
+    }
+
+    // 对于超出粒子数量的纹理像素，设置为零速度
+    for (let i = this.config.count; i < width * height; i++) {
+      const i4 = i * 4
+      data[i4] = 0.0
+      data[i4 + 1] = 0.0
+      data[i4 + 2] = 0.0
+      data[i4 + 3] = 0.0
     }
 
     const texture = new THREE.DataTexture(data, width, height, THREE.RGBAFormat, THREE.FloatType)
@@ -536,23 +578,22 @@ export class GPGUParticleSystem {
       const i2 = i * 2
 
       // 位置（占位符，设置为非零值，确保几何体有效）
-      // 虽然最终从 GPU 纹理读取位置，但 Three.js 需要有效的几何体数据
-      positions[i3] = (Math.random() - 0.5) * 0.01
-      positions[i3 + 1] = (Math.random() - 0.5) * 0.01
-      positions[i3 + 2] = (Math.random() - 0.5) * 0.01
-
+                // 虽然最终从 GPU 纹理读取位置，但 Three.js 需要有效的几何体数据
+                // 设置为分散的占位符位置，避免所有粒子在同一个位置
+                positions[i3] = (Math.random() - 0.5) * this.config.boundsRadius * 2
+                positions[i3 + 1] = (Math.random() - 0.5) * this.config.boundsRadius * 2
+                positions[i3 + 2] = (Math.random() - 0.5) * this.config.boundsRadius * 2
       // 颜色（白色占位符，稍后由 ColorManager 替换）
       colors[i3] = 1.0
       colors[i3 + 1] = 1.0
       colors[i3 + 2] = 1.0
 
       // UV 坐标（用于从纹理读取位置）
-      // 使用 texel center 采样，避免边缘采样问题
-      const u = (i % width + 0.5) / width
-      const v = (Math.floor(i / width) + 0.5) / height
-      uvs[i2] = u
-      uvs[i2 + 1] = v
-    }
+                // 注意：GPUComputationRenderer 的纹理坐标可能需要翻转
+                const u = (i % width + 0.5) / width
+                const v = 1.0 - (Math.floor(i / width) + 0.5) / height  // 翻转 V 坐标
+                uvs[i2] = u
+                uvs[i2 + 1] = v    }
 
     // 设置几何体属性
     geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3))
@@ -617,18 +658,13 @@ export class GPGUParticleSystem {
           // 从纹理读取位置
           vec4 posData = texture2D(tPosition, uv);
 
-          // 检查位置数据是否有效
-          if (length(posData.rgb) < 0.001) {
-            // 如果位置数据无效，跳过这个粒子
-            gl_Position = vec4(0.0);
-            gl_PointSize = 0.0;
-            return;
-          }
-
           vec4 mvPosition = modelViewMatrix * vec4(posData.rgb, 1.0);
 
           // 计算基础点大小，使用透视衰减系数实现近大远小效果
           float basePointSize = uSize * uPerspectiveScale / -mvPosition.z;
+
+          // 确保粒子大小至少为 1.0 像素
+          basePointSize = max(basePointSize, 1.0);
 
           // 应用呼吸效果
           float breathingFactor = 1.0;
@@ -648,6 +684,9 @@ export class GPGUParticleSystem {
 
           // 组合所有大小因子
           gl_PointSize = basePointSize * breathingFactor * speedFactor;
+
+          // 确保最终点大小至少为 2.0 像素
+          gl_PointSize = max(gl_PointSize, 2.0);
 
           // 计算雾效因子
           if (uEnableFog > 0.5) {
@@ -798,20 +837,27 @@ export class GPGUParticleSystem {
             textureWidth: (positionTexture.image as any).width,
             textureHeight: (positionTexture.image as any).height,
             uniformValue: this.points.material.uniforms.tPosition.value !== null,
-            materialCompiled: this.points.material.vertexShader !== null
+            materialCompiled: this.points.material.vertexShader !== null,
+            uSize: this.points.material.uniforms.uSize.value,
+            uPerspectiveScale: this.points.material.uniforms.uPerspectiveScale.value
           })
         }
 
-        // 首次渲染时记录日志
-        if (this.firstRender) {
-          console.log('[GPGUParticleSystem] 首次渲染更新', {
-            hasPositionTexture: positionTexture !== null,
-            hasVelocityTexture: velocityTexture !== null,
-            uniformSet: this.points.material.uniforms.tPosition.value !== null,
-            textureSize: { width: (positionTexture.image as any).width, height: (positionTexture.image as any).height }
-          })
-          this.firstRender = false
+        // 每 60 帧验证一次纹理数据
+        if (this.updateCount && this.updateCount % 60 === 0) {
+          // 读取纹理数据进行验证（仅前 3 个粒子）
+          const renderer = this.points.material.uniforms.tPosition.value.image
+          if (renderer && renderer.data) {
+            const pos0 = [renderer.data[0], renderer.data[1], renderer.data[2]]
+            const pos1 = [renderer.data[4], renderer.data[5], renderer.data[6]]
+            const pos2 = [renderer.data[8], renderer.data[9], renderer.data[10]]
+            console.log('[GPGUParticleSystem] 纹理数据验证', {
+              frame: this.updateCount,
+              positions: [pos0, pos1, pos2]
+            })
+          }
         }
+        this.updateCount++
       }
 
       // 更新颜色（如果有颜色管理器）
