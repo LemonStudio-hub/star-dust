@@ -348,6 +348,40 @@
                 class="control-slider"
               >
             </div>
+
+            <!-- 发光粒子效果开关 -->
+            <div class="control-group">
+              <label class="control-label">
+                <span class="label-text">发光粒子</span>
+                <span class="label-value">{{ glowConfig.enabled ? '开启' : '关闭' }}</span>
+              </label>
+              <div class="toggle-switch">
+                <input 
+                  type="checkbox" 
+                  v-model="glowConfig.enabled" 
+                  @change="updateGlowConfig"
+                  class="toggle-checkbox"
+                >
+                <span class="toggle-slider"></span>
+              </div>
+            </div>
+
+            <!-- 发光强度 -->
+            <div class="control-group" v-if="glowConfig.enabled">
+              <label class="control-label">
+                <span class="label-text">发光强度</span>
+                <span class="label-value">{{ glowConfig.intensity.toFixed(2) }}</span>
+              </label>
+              <input 
+                type="range" 
+                v-model.number="glowConfig.intensity" 
+                min="0" 
+                max="2" 
+                step="0.1"
+                @input="updateGlowConfig"
+                class="control-slider"
+              >
+            </div>
           </div>
 
           <div class="dashboard-footer">
@@ -444,6 +478,7 @@ const saveConfigToStorage = (): void => {
     const configToSave = {
       ...particleConfig,
       bloom: { ...bloomConfig },
+      glow: { ...glowConfig },
       themeName: currentTheme.value.name,
       savedAt: new Date().toISOString()
     }
@@ -476,6 +511,15 @@ const loadConfigFromStorage = (): void => {
         Object.keys(bloomConfig).forEach(key => {
           if (config.bloom[key] !== undefined) {
             (bloomConfig as any)[key] = config.bloom[key]
+          }
+        })
+      }
+
+      // 恢复发光配置
+      if (config.glow) {
+        Object.keys(glowConfig).forEach(key => {
+          if (config.glow[key] !== undefined) {
+            (glowConfig as any)[key] = config.glow[key]
           }
         })
       }
@@ -520,6 +564,14 @@ const bloomConfig = reactive({
   strength: 1.5,
   radius: 0.4,
   threshold: 0.85
+})
+
+/**
+ * 发光粒子效果配置
+ */
+const glowConfig = reactive({
+  enabled: true,
+  intensity: 0.5
 })
 
 /**
@@ -654,6 +706,20 @@ const updateBloomConfig = (): void => {
 }
 
 /**
+ * 更新发光配置
+ */
+const updateGlowConfig = (): void => {
+  if (appManager) {
+    appManager.setGlowConfig({
+      enabled: glowConfig.enabled,
+      intensity: glowConfig.intensity
+    })
+    // 自动保存配置到 localStorage
+    saveConfigToStorage()
+  }
+}
+
+/**
  * 重置配置为默认值
  */
 const resetConfig = (): void => {
@@ -663,12 +729,16 @@ const resetConfig = (): void => {
   bloomConfig.strength = 1.5
   bloomConfig.radius = 0.4
   bloomConfig.threshold = 0.85
+  // 重置发光配置为默认
+  glowConfig.enabled = true
+  glowConfig.intensity = 0.5
   // 重置主题为默认
   currentTheme.value = presetThemes[0]
   // 清除 localStorage 中的配置
   clearConfigStorage()
   updateParticleConfig()
   updateBloomConfig()
+  updateGlowConfig()
 }
 
 /**
@@ -858,7 +928,9 @@ onMounted(() => {
       speedBasedSizeFactor: particleConfig.speedBasedSizeFactor,    // 速度对大小的影响因子
       parallaxStrength: particleConfig.parallaxStrength,             // 视差强度
       enableFog: particleConfig.enableFog,                          // 启用雾效
-      fogDensity: particleConfig.fogDensity                         // 雾效浓度
+      fogDensity: particleConfig.fogDensity,                        // 雾效浓度
+      enableGlow: glowConfig.enabled,                               // 启用发光效果
+      glowIntensity: glowConfig.intensity                            // 发光强度
     }
 
     // 创建并启动应用管理器

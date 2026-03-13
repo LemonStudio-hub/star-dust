@@ -886,6 +886,86 @@ export class AppManager {
   }
 
   /**
+   * 设置发光效果配置
+   *
+   * @param config - 发光配置
+   * 
+   * @example
+   * ```typescript
+   * appManager.setGlowConfig({
+   *   enabled: true,
+   *   intensity: 0.5
+   * });
+   * ```
+   */
+  setGlowConfig(config: { enabled?: boolean; intensity?: number }): void {
+    const updateConfig: any = {}
+    if (config.enabled !== undefined) {
+      updateConfig.enableGlow = config.enabled
+    }
+    if (config.intensity !== undefined) {
+      updateConfig.glowIntensity = config.intensity
+    }
+    this.particleSystem.updateConfig(updateConfig)
+  }
+
+  /**
+   * 获取发光效果配置
+   *
+   * @returns 当前发光配置
+   */
+  getGlowConfig(): { enabled: boolean; intensity: number } {
+    return this.particleSystem.getGlowConfig()
+  }
+
+  /**
+   * 启用发光效果
+   *
+   * @example
+   * ```typescript
+   * appManager.enableGlow();
+   * ```
+   */
+  enableGlow(): void {
+    this.setGlowConfig({ enabled: true })
+  }
+
+  /**
+   * 禁用发光效果
+   *
+   * @example
+   * ```typescript
+   * appManager.disableGlow();
+   * ```
+   */
+  disableGlow(): void {
+    this.setGlowConfig({ enabled: false })
+  }
+
+  /**
+   * 检查发光效果是否启用
+   *
+   * @returns 是否启用发光
+   */
+  isGlowEnabled(): boolean {
+    return this.getGlowConfig().enabled
+  }
+
+  /**
+   * 设置发光强度
+   *
+   * @param intensity - 发光强度（推荐值：0-2）
+   * 
+   * @example
+   * ```typescript
+   * appManager.setGlowIntensity(0.5);
+   * ```
+   */
+  setGlowIntensity(intensity: number): void {
+    this.setGlowConfig({ intensity })
+  }
+
+  /**
    * 主渲染循环
    *
    * 每帧执行以下操作：

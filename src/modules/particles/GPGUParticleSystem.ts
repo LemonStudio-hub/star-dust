@@ -207,6 +207,10 @@ export interface GPGUParticleConfig {
   fogDensity?: number
   /** 雾的颜色（RGB，0-1） */
   fogColor?: [number, number, number]
+  /** 是否启用发光效果 */
+  enableGlow?: boolean
+  /** 发光强度（0-2） */
+  glowIntensity?: number
 }
 
 /**
@@ -288,6 +292,10 @@ export class GPGUParticleSystem {
   private fogDensity: number
   /** 雾的颜色 */
   private fogColor: [number, number, number]
+  /** 是否启用发光效果 */
+  private enableGlow: boolean
+  /** 发光强度 */
+  private glowIntensity: number
 
   /**
    * 构造函数
@@ -327,6 +335,10 @@ export class GPGUParticleSystem {
     this.enableFog = config.enableFog ?? true
     this.fogDensity = config.fogDensity ?? 0.01
     this.fogColor = config.fogColor ?? [0.0, 0.0, 0.1]  // 默认深蓝色雾
+
+    // 初始化发光参数
+    this.enableGlow = config.enableGlow ?? true
+    this.glowIntensity = config.glowIntensity ?? 0.5
 
     // 初始化 GPU 计算渲染器
     const textureWidth = Math.ceil(Math.sqrt(config.count))
@@ -576,6 +588,8 @@ export class GPGUParticleSystem {
         uEnableFog: { value: this.enableFog },
         uFogDensity: { value: this.fogDensity },
         uFogColor: { value: new THREE.Vector3(...this.fogColor) },
+        uEnableGlow: { value: this.enableGlow },
+        uGlowIntensity: { value: this.glowIntensity },
         uTime: { value: 0 }
       },
       vertexShader: `
@@ -649,6 +663,8 @@ export class GPGUParticleSystem {
       fragmentShader: `
         uniform vec3 uFogColor;
         uniform float uEnableFog;
+        uniform float uEnableGlow;
+        uniform float uGlowIntensity;
         varying vec3 vColor;
         varying float vFogFactor;
 
@@ -657,12 +673,30 @@ export class GPGUParticleSystem {
           if (r > 0.5) discard;
           float alpha = 1.0 - smoothstep(0.3, 0.5, r);
           
-          // 应用雾效
+          // 计算发光效果
           vec3 finalColor = vColor;
           
+          if (uEnableGlow > 0.5 && uGlowIntensity > 0.0) {
+            // 计算从中心到边缘的距离
+            vec2 center = vec2(0.5, 0.5);
+            float dist = distance(gl_PointCoord, center);
+            
+            // 创建光晕效果：中心亮，边缘柔和
+            float glowFactor = smoothstep(0.5, 0.0, dist) * uGlowIntensity;
+            
+            // 添加发光
+            vec3 glowColor = vColor * glowFactor;
+            finalColor = vColor + glowColor;
+            
+            // 发光也会影响透明度
+            alpha += glowFactor * 0.3;
+            alpha = min(alpha, 1.0);
+          }
+          
+          // 应用雾效
           if (uEnableFog > 0.5) {
             // 混合粒子颜色和雾的颜色
-            finalColor = mix(vColor, uFogColor, vFogFactor);
+            finalColor = mix(finalColor, uFogColor, vFogFactor);
             // 根据距离衰减透明度
             alpha *= (1.0 - vFogFactor * 0.7);
           }
@@ -1009,6 +1043,42 @@ export class GPGUParticleSystem {
   }
 
   /**
+   * 获取发光效果配置
+   * 
+   * @returns 发光效果配置
+   */
+  getGlowConfig(): { enabled: boolean; intensity: number } {
+    return {
+      enabled: this.enableGlow,
+      intensity: this.glowIntensity
+    }
+  }
+
+  /**
+   * 设置发光效果启用状态
+   * 
+   * @param enabled - 是否启用发光
+   */
+  setGlowEnabled(enabled: boolean): void {
+    this.enableGlow = enabled
+    if (this.points.material instanceof THREE.ShaderMaterial) {
+      this.points.material.uniforms.uEnableGlow.value = enabled ? 1.0 : 0.0
+    }
+  }
+
+  /**
+   * 设置发光强度
+   * 
+   * @param intensity - 发光强度（0-2）
+   */
+  setGlowIntensity(intensity: number): void {
+    this.glowIntensity = intensity
+    if (this.points.material instanceof THREE.ShaderMaterial) {
+      this.points.material.uniforms.uGlowIntensity.value = intensity
+    }
+  }
+
+  /**
    * 更新粒子系统配置
    *
    * @param config - 新的配置参数（部分更新）
@@ -1054,6 +1124,21 @@ export class GPGUParticleSystem {
         }
         if (this.velocityVariable) {
           this.velocityVariable.material.uniforms.uMaxSpeed.value = config.maxSpeed
+        }
+      }
+
+      // 更新发光效果配置
+      if (config.enableGlow !== undefined) {
+        this.enableGlow = config.enableGlow
+        if (this.points.material instanceof THREE.ShaderMaterial) {
+          this.points.material.uniforms.uEnableGlow.value = this.enableGlow ? 1.0 : 0.0
+        }
+      }
+
+      if (config.glowIntensity !== undefined) {
+        this.glowIntensity = config.glowIntensity
+        if (this.points.material instanceof THREE.ShaderMaterial) {
+          this.points.material.uniforms.uGlowIntensity.value = this.glowIntensity
         }
       }
     } catch (error) {
