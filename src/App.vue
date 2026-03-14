@@ -395,8 +395,8 @@
                 type="range" 
                 v-model.number="glowConfig.intensity" 
                 min="0" 
-                max="2" 
-                step="0.1"
+                max="1" 
+                step="0.05"
                 @input="updateGlowConfig"
                 class="control-slider"
               >
@@ -822,7 +822,7 @@ const bloomConfig = reactive({
  */
 const glowConfig = reactive({
   enabled: true,
-  intensity: 0.5
+  intensity: 0.2
 })
 
 /**

@@ -372,14 +372,17 @@ export class ParticleSystem {
               float dist = distance(gl_PointCoord, center);
               
               // 创建光晕效果：中心亮，边缘柔和
-              float glowFactor = smoothstep(0.5, 0.0, dist) * uGlowIntensity;
+              // 使用更平缓的曲线，减少发光范围
+              float glowFactor = smoothstep(0.4, 0.0, dist) * uGlowIntensity * 0.3;
               
-              // 添加发光
-              vec3 glowColor = vColor * glowFactor;
-              finalColor = vColor + glowColor;
+              // 修复发光计算：使用混合而不是叠加，避免颜色超过 1.0
+              finalColor = mix(finalColor, finalColor * 1.5, glowFactor);
               
-              // 发光也会影响透明度
-              alpha += glowFactor * 0.3;
+              // 确保颜色值不超过 1.0
+              finalColor = clamp(finalColor, 0.0, 1.0);
+              
+              // 发光也会影响透明度（减少透明度影响）
+              alpha += glowFactor * 0.15;
               alpha = min(alpha, 1.0);
             }
             
