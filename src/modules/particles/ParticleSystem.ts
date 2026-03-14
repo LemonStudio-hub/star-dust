@@ -12,6 +12,7 @@ import { NoiseTexture } from '../noise/NoiseTexture'
 import { ColorManager } from '../colors/ColorManager'
 import { ColorTheme, DefaultColorTheme } from '../colors/ColorTheme'
 import { TrailManager, TrailConfig } from './TrailManager'
+import { MotionMode, AttractorConfig, DEFAULT_ATTRACTOR_CONFIG } from './MotionMode'
 
 /**
  * 粒子系统配置接口
@@ -55,6 +56,10 @@ export interface ParticleConfig {
   enableGlow?: boolean
   /** 发光强度（0-2） */
   glowIntensity?: number
+  /** 运动模式 */
+  motionMode?: MotionMode
+  /** 吸引子配置 */
+  attractorConfig?: AttractorConfig
 }
 
 /**
@@ -114,6 +119,10 @@ export class ParticleSystem {
   private enableGlow: boolean
   /** 发光强度 */
   private glowIntensity: number
+  /** 运动模式 */
+  private motionMode: MotionMode
+  /** 吸引子配置 */
+  private attractorConfig: AttractorConfig
   /** 累计时间（用于呼吸效果） */
   private accumulatedTime: number = 0
   /** 当前呼吸因子 */
@@ -177,6 +186,10 @@ export class ParticleSystem {
     // 初始化发光参数
     this.enableGlow = config.enableGlow ?? true
     this.glowIntensity = config.glowIntensity ?? 0.5
+
+    // 初始化运动模式和吸引子配置
+    this.motionMode = config.motionMode ?? MotionMode.NOISE_FIELD
+    this.attractorConfig = config.attractorConfig ?? DEFAULT_ATTRACTOR_CONFIG
 
     this.points = this.create(useDefaultColor)
     scene.add(this.points)
@@ -419,122 +432,441 @@ export class ParticleSystem {
   }
 
   /**
-     * 更新粒子系统
-     *
-     * 根据噪声场更新所有粒子的位置和速度。
-     * 当粒子超出边界时，重置到中心区域。
-     *
-     * 更新逻辑：
-     * 1. 采样当前位置的噪声向量
-     * 2. 根据噪声向量更新速度
-     * 3. 限制最大速度
-     * 4. 更新位置
-     * 5. 检查边界条件
-     * 6. 更新颜色（如果有颜色管理器）
-     * 7. 更新轨迹（如果启用了轨迹）
-     *
-     * @param time - 当前时间，用于噪声采样
-     * @param deltaTime - 时间增量（毫秒），用于颜色动画
-     *
-     * @example
-     * ```typescript
-     * particleSystem.update(currentTime, 16.67);
-     * ```
-     */
-    update(time: number, deltaTime: number = 16): void {
-      if (this.disposed || !this.positions || !this.velocities) {
-        return
-      }
-  
-      try {
-        const positions = this.points.geometry.attributes.position.array as Float32Array
-        const len = positions.length
-  
-        // 更新每个粒子
-        for (let i = 0; i < len; i += 3) {
-          const x = positions[i]
-          const y = positions[i + 1]
-          const z = positions[i + 2]
-  
-          // 从噪声纹理采样速度向量
-          const curl = this.noiseTexture.sample(x, y, z, time)
-  
-          // 根据噪声向量更新速度
-          this.velocities[i] += curl.x * this.config.velocityScale
-          this.velocities[i + 1] += curl.y * this.config.velocityScale
-          this.velocities[i + 2] += curl.z * this.config.velocityScale
-  
-          // 计算当前速度
-          const speed = Math.sqrt(
-            this.velocities[i] * this.velocities[i] +
-            this.velocities[i + 1] * this.velocities[i + 1] +
-            this.velocities[i + 2] * this.velocities[i + 2]
-          )
-  
-          // 限制最大速度
-          if (speed > this.config.maxSpeed) {
-            const factor = this.config.maxSpeed / speed
-            this.velocities[i] *= factor
-            this.velocities[i + 1] *= factor
-            this.velocities[i + 2] *= factor
-          }
-  
-          // 更新位置
-          positions[i] += this.velocities[i]
-          positions[i + 1] += this.velocities[i + 1]
-          positions[i + 2] += this.velocities[i + 2]
-  
-          // 检查边界条件
-          const distSq = x * x + y * y + z * z
-          const boundsRadiusSq = this.config.boundsRadius * this.config.boundsRadius
-          if (distSq > boundsRadiusSq) {
-            // 重置到中心附近
-            positions[i] *= 0.1
-            positions[i + 1] *= 0.1
-            positions[i + 2] *= 0.1
-  
-            // 重置速度
-            this.velocities[i] = (Math.random() - 0.5) * 0.05
-            this.velocities[i + 1] = (Math.random() - 0.5) * 0.05
-            this.velocities[i + 2] = (Math.random() - 0.5) * 0.05
-          }
-        }
-  
-        // 标记位置属性需要更新
-        
-                        this.points.geometry.attributes.position.needsUpdate = true
-        
-                
-        
-                        // 更新呼吸效果（如果启用）
-                        if (this.config.enableBreathing) {
-                          this.updateBreathing(deltaTime)
-                        }
+   * 计算 Lorenz 吸引子
+   * 
+   * Lorenz 吸引子是最著名的混沌系统之一，产生经典的"蝴蝶形状"。
+   * 
+   * 方程：
+   * dx/dt = σ(y - x)
+   * dy/dt = x(ρ - z) - y
+   * dz/dt = xy - βz
+   * 
+   * @param x - X 坐标
+   * @param y - Y 坐标
+   * @param z - Z 坐标
+   * @param dt - 时间步长
+   * @returns {dx, dy, dz} 速度增量
+   * @private
+   */
+  private calculateLorenz(x: number, y: number, z: number, dt: number): {dx: number, dy: number, dz: number} {
+    const sigma = this.attractorConfig.lorenz?.sigma ?? 10.0
+    const rho = this.attractorConfig.lorenz?.rho ?? 28.0
+    const beta = this.attractorConfig.lorenz?.beta ?? 8.0 / 3.0
+    
+    return {
+      dx: sigma * (y - x) * dt,
+      dy: (x * (rho - z) - y) * dt,
+      dz: (x * y - beta * z) * dt
+    }
+  }
 
-                        // 更新粒子大小（如果启用基于速度的大小变化）
-                        if (this.config.enableSpeedBasedSize && this.sizes) {
-                          this.updateParticleSizes()
-                        }
+  /**
+   * 计算 Thomas 吸引子
+   * 
+   * Thomas 吸引子产生三个对称的螺旋臂，视觉效果优雅。
+   * 
+   * 方程：
+   * dx/dt = sin(y) - bx
+   * dy/dt = sin(z) - by
+   * dz/dt = sin(x) - bz
+   * 
+   * @param x - X 坐标
+   * @param y - Y 坐标
+   * @param z - Z 坐标
+   * @param dt - 时间步长
+   * @returns {dx, dy, dz} 速度增量
+   * @private
+   */
+  private calculateThomas(x: number, y: number, z: number, dt: number): {dx: number, dy: number, dz: number} {
+    const b = this.attractorConfig.thomas?.b ?? 0.208186
+    
+    return {
+      dx: (Math.sin(y) - b * x) * dt,
+      dy: (Math.sin(z) - b * y) * dt,
+      dz: (Math.sin(x) - b * z) * dt
+    }
+  }
+
+  /**
+   * 计算 Clifford 吸引子
+   * 
+   * Clifford 吸引子在 2D 平面上产生复杂的分形图案，扩展到 3D 后产生独特的空间结构。
+   * 
+   * 方程（2D原版）：
+   * dx/dt = sin(a*y) + c*cos(a*x)
+   * dy/dt = sin(b*x) + d*cos(b*y)
+   * 
+   * 3D扩展（添加 Z 轴）：
+   * dz/dt = sin(x) + cos(y) + z*0.1
+   * 
+   * @param x - X 坐标
+   * @param y - Y 坐标
+   * @param z - Z 坐标
+   * @param dt - 时间步长
+   * @returns {dx, dy, dz} 速度增量
+   * @private
+   */
+  private calculateClifford(x: number, y: number, z: number, dt: number): {dx: number, dy: number, dz: number} {
+    const a = this.attractorConfig.clifford?.a ?? 1.7
+    const b = this.attractorConfig.clifford?.b ?? 1.7
+    const c = this.attractorConfig.clifford?.c ?? 0.06
+    const d = this.attractorConfig.clifford?.d ?? 1.2
+    
+    return {
+      dx: (Math.sin(a * y) + c * Math.cos(a * x)) * dt,
+      dy: (Math.sin(b * x) + d * Math.cos(b * y)) * dt,
+      dz: (Math.sin(x) + Math.cos(y) + z * 0.1) * dt * 0.5  // Z 轴较慢以保持 2D 图案特征
+    }
+  }
+
+  /**
+   * 计算 Rossler 吸引子
+   * 
+   * Rossler 吸引子产生螺旋状结构，具有独特的混沌特性。
+   * 
+   * 方程：
+   * dx/dt = -y - z
+   * dy/dt = x + a*y
+   * dz/dt = b + z*(x - c)
+   * 
+   * @param x - X 坐标
+   * @param y - Y 坐标
+   * @param z - Z 坐标
+   * @param dt - 时间步长
+   * @returns {dx, dy, dz} 速度增量
+   * @private
+   */
+  private calculateRossler(x: number, y: number, z: number, dt: number): {dx: number, dy: number, dz: number} {
+    const a = this.attractorConfig.rossler?.a ?? 0.2
+    const b = this.attractorConfig.rossler?.b ?? 0.2
+    const c = this.attractorConfig.rossler?.c ?? 5.7
+    
+    return {
+      dx: (-y - z) * dt,
+      dy: (x + a * y) * dt,
+      dz: (b + z * (x - c)) * dt
+    }
+  }
+
+  /**
+   * 更新粒子系统（噪声场模式）
+   * 
+   * 使用 FBM + Curl 噪声场更新粒子位置。
+   * 
+   * @param positions - 粒子位置数组
+   * @param time - 当前时间
+   * @private
+   */
+  private updateWithNoiseField(positions: Float32Array, time: number): void {
+    for (let i = 0; i < positions.length; i += 3) {
+      const x = positions[i]
+      const y = positions[i + 1]
+      const z = positions[i + 2]
+      
+      // 从噪声纹理采样速度向量
+      const curl = this.noiseTexture.sample(x, y, z, time)
+      
+      // 根据噪声向量更新速度
+      this.velocities![i] += curl.x * this.config.velocityScale
+      this.velocities![i + 1] += curl.y * this.config.velocityScale
+      this.velocities![i + 2] += curl.z * this.config.velocityScale
+      
+      // 限制最大速度
+      this.limitVelocity(i)
+      
+      // 更新位置
+      positions[i] += this.velocities![i]
+      positions[i + 1] += this.velocities![i + 1]
+      positions[i + 2] += this.velocities![i + 2]
+      
+      // 边界检测
+      this.checkBoundary(i)
+    }
+  }
+
+  /**
+   * 更新粒子系统（Lorenz 吸引子模式）
+   * 
+   * 使用 Lorenz 吸引子更新粒子位置。
+   * 
+   * @param positions - 粒子位置数组
+   * @param dt - 时间步长
+   * @private
+   */
+  private updateWithLorenz(positions: Float32Array, dt: number): void {
+    const scale = this.attractorConfig.particleScale
+    
+    for (let i = 0; i < positions.length; i += 3) {
+      const x = positions[i] / scale
+      const y = positions[i + 1] / scale
+      const z = positions[i + 2] / scale
+      
+      // 计算 Lorenz 吸引子速度
+      const delta = this.calculateLorenz(x, y, z, dt)
+      
+      // 更新速度（使用惯性）
+      this.velocities![i] = this.velocities![i] * 0.9 + delta.dx
+      this.velocities![i + 1] = this.velocities![i + 1] * 0.9 + delta.dy
+      this.velocities![i + 2] = this.velocities![i + 2] * 0.9 + delta.dz
+      
+      // 更新位置
+      positions[i] += this.velocities![i] * scale
+      positions[i + 1] += this.velocities![i + 1] * scale
+      positions[i + 2] += this.velocities![i + 2] * scale
+      
+      // 边界检测
+      this.checkBoundary(i)
+    }
+  }
+
+  /**
+   * 更新粒子系统（Thomas 吸引子模式）
+   * 
+   * 使用 Thomas 吸引子更新粒子位置。
+   * 
+   * @param positions - 粒子位置数组
+   * @param dt - 时间步长
+   * @private
+   */
+  private updateWithThomas(positions: Float32Array, dt: number): void {
+    const scale = this.attractorConfig.particleScale
+    
+    for (let i = 0; i < positions.length; i += 3) {
+      const x = positions[i] / scale
+      const y = positions[i + 1] / scale
+      const z = positions[i + 2] / scale
+      
+      // 计算 Thomas 吸引子速度
+      const delta = this.calculateThomas(x, y, z, dt)
+      
+      // 更新速度（使用惯性）
+      this.velocities![i] = this.velocities![i] * 0.9 + delta.dx
+      this.velocities![i + 1] = this.velocities![i + 1] * 0.9 + delta.dy
+      this.velocities![i + 2] = this.velocities![i + 2] * 0.9 + delta.dz
+      
+      // 更新位置
+      positions[i] += this.velocities![i] * scale
+      positions[i + 1] += this.velocities![i + 1] * scale
+      positions[i + 2] += this.velocities![i + 2] * scale
+      
+      // 边界检测
+      this.checkBoundary(i)
+    }
+  }
+
+  /**
+   * 更新粒子系统（Clifford 吸引子模式）
+   * 
+   * 使用 Clifford 吸引子更新粒子位置。
+   * 
+   * @param positions - 粒子位置数组
+   * @param dt - 时间步长
+   * @private
+   */
+  private updateWithClifford(positions: Float32Array, dt: number): void {
+    const scale = this.attractorConfig.particleScale
+    
+    for (let i = 0; i < positions.length; i += 3) {
+      const x = positions[i] / scale
+      const y = positions[i + 1] / scale
+      const z = positions[i + 2] / scale
+      
+      // 计算 Clifford 吸引子速度
+      const delta = this.calculateClifford(x, y, z, dt)
+      
+      // 更新速度（使用惯性）
+      this.velocities![i] = this.velocities![i] * 0.9 + delta.dx
+      this.velocities![i + 1] = this.velocities![i + 1] * 0.9 + delta.dy
+      this.velocities![i + 2] = this.velocities![i + 2] * 0.9 + delta.dz
+      
+      // 更新位置
+      positions[i] += this.velocities![i] * scale
+      positions[i + 1] += this.velocities![i + 1] * scale
+      positions[i + 2] += this.velocities![i + 2] * scale
+      
+      // 边界检测
+      this.checkBoundary(i)
+    }
+  }
+
+  /**
+   * 更新粒子系统（Rossler 吸引子模式）
+   * 
+   * 使用 Rossler 吸引子更新粒子位置。
+   * 
+   * @param positions - 粒子位置数组
+   * @param dt - 时间步长
+   * @private
+   */
+  private updateWithRossler(positions: Float32Array, dt: number): void {
+    const scale = this.attractorConfig.particleScale
+    
+    for (let i = 0; i < positions.length; i += 3) {
+      const x = positions[i] / scale
+      const y = positions[i + 1] / scale
+      const z = positions[i + 2] / scale
+      
+      // 计算 Rossler 吸引子速度
+      const delta = this.calculateRossler(x, y, z, dt)
+      
+      // 更新速度（使用惯性）
+      this.velocities![i] = this.velocities![i] * 0.9 + delta.dx
+      this.velocities![i + 1] = this.velocities![i + 1] * 0.9 + delta.dy
+      this.velocities![i + 2] = this.velocities![i + 2] * 0.9 + delta.dz
+      
+      // 更新位置
+      positions[i] += this.velocities![i] * scale
+      positions[i + 1] += this.velocities![i + 1] * scale
+      positions[i + 2] += this.velocities![i + 2] * scale
+      
+      // 边界检测
+      this.checkBoundary(i)
+    }
+  }
+
+  /**
+   * 限制速度
+   * 
+   * @param i - 粒子索引（起始位置）
+   * @private
+   */
+  private limitVelocity(i: number): void {
+    const speed = Math.sqrt(
+      this.velocities![i] ** 2 +
+      this.velocities![i + 1] ** 2 +
+      this.velocities![i + 2] ** 2
+    )
+    
+    if (speed > this.config.maxSpeed) {
+      const factor = this.config.maxSpeed / speed
+      this.velocities![i] *= factor
+      this.velocities![i + 1] *= factor
+      this.velocities![i + 2] *= factor
+    }
+  }
+
+  /**
+   * 检查边界条件
+   * 
+   * 当粒子超出边界时，重置到中心区域。
+   * 
+   * @param i - 粒子索引（起始位置）
+   * @private
+   */
+  private checkBoundary(i: number): void {
+    const x = this.positions![i]
+    const y = this.positions![i + 1]
+    const z = this.positions![i + 2]
+    
+    const dist = Math.sqrt(x * x + y * y + z * z)
+    
+    if (dist > this.config.boundsRadius) {
+      // 重置到中心附近（吸引子模式）
+      if (this.motionMode === MotionMode.LORENZ || 
+          this.motionMode === MotionMode.THOMAS ||
+          this.motionMode === MotionMode.CLIFFORD ||
+          this.motionMode === MotionMode.ROSSLER) {
+        // 重置到吸引子中心附近
+        const angle = Math.random() * Math.PI * 2
+        const radius = Math.random() * 5
+        this.positions![i] = radius * Math.cos(angle)
+        this.positions![i + 1] = radius * Math.sin(angle)
+        this.positions![i + 2] = Math.random() * 2 - 1
         
-                        // 更新颜色（如果有颜色管理器）
+        // 重置速度
+        this.velocities![i] = 0
+        this.velocities![i + 1] = 0
+        this.velocities![i + 2] = 0
+      } else {
+        // 噪声场模式：重置到中心并赋予随机速度
+        this.positions![i] *= 0.1
         
-                        if (this.colorManager) {
-        
-                          this.colorManager.update(deltaTime)
-        
-                          this.updateColors()
-        
-                        }                
-                // 更新轨迹（如果启用了轨迹）
-                if (this.trailManager) {
-                  this.trailManager.update(positions)
-                }      } catch (error) {
-        console.error('更新粒子系统时发生错误:', error)
+        this.velocities![i] = (Math.random() - 0.5) * 0.05
+        this.velocities![i + 1] = (Math.random() - 0.5) * 0.05
+        this.velocities![i + 2] = (Math.random() - 0.5) * 0.05
       }
     }
+  }
+
+  /**
+       * 更新粒子系统
+       *
+       * 根据运动模式更新所有粒子的位置和速度。
+       * 支持多种运动模式：噪声场、Lorenz 吸引子、Thomas 吸引子等。
+       *
+       * 更新逻辑：
+       * 1. 根据运动模式选择更新方法
+       * 2. 更新粒子位置和速度
+       * 3. 更新颜色（如果有颜色管理器）
+       * 4. 更新轨迹（如果启用了轨迹）
+       *
+       * @param time - 当前时间，用于噪声采样
+       * @param deltaTime - 时间增量（毫秒），用于颜色动画
+       *
+       * @example
+       * ```typescript
+       * particleSystem.update(currentTime, 16.67);
+       * ```
+       */
+    update(time: number, deltaTime: number = 16): void {
+        if (this.disposed || !this.positions || !this.velocities) {
+          return
+        }
+    
+        try {
+          const positions = this.points.geometry.attributes.position.array as Float32Array
+          const dt = deltaTime * this.attractorConfig.timeScale  // 转换为秒
+          
+          // 根据运动模式选择更新方法
+          switch (this.motionMode) {
+            case MotionMode.LORENZ:
+              this.updateWithLorenz(positions, dt)
+              break
+            case MotionMode.THOMAS:
+              this.updateWithThomas(positions, dt)
+              break
+            case MotionMode.CLIFFORD:
+              this.updateWithClifford(positions, dt)
+              break
+            case MotionMode.ROSSLER:
+              this.updateWithRossler(positions, dt)
+              break
+            case MotionMode.NOISE_FIELD:
+            default:
+              this.updateWithNoiseField(positions, time)
+              break
+          }
+    
+          // 标记位置属性需要更新
+          this.points.geometry.attributes.position.needsUpdate = true
+
+          // 更新呼吸效果（如果启用）
+          if (this.config.enableBreathing) {
+            this.updateBreathing(deltaTime)
+          }
+
+          // 更新粒子大小（如果启用基于速度的大小变化）
+          if (this.config.enableSpeedBasedSize && this.sizes) {
+            this.updateParticleSizes()
+          }
+
+          // 更新颜色（如果有颜色管理器）
+          if (this.colorManager) {
+            this.colorManager.update(deltaTime)
+            this.updateColors()
+          }
+
+          // 更新轨迹（如果启用了轨迹）
+          if (this.trailManager) {
+            this.trailManager.update(positions)
+          }
+        } catch (error) {
+          console.error('更新粒子系统时发生错误:', error)
+        }
+      }
   
-    /**
-     * 更新粒子颜色
+  /**
+   * 更新粒子颜色
      *
      * 从颜色管理器获取颜色并应用到粒子系统。
      * 使用批量复制优化性能。

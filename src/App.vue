@@ -281,6 +281,25 @@
               >
             </div>
 
+            <!-- 运动模式选择 -->
+            <div class="control-group">
+              <label class="control-label">
+                <span class="label-text">运动模式</span>
+                <span class="label-value">{{ getMotionModeName(motionConfig.mode) }}</span>
+              </label>
+              <div class="mode-buttons">
+                <button
+                  v-for="mode in motionModes"
+                  :key="mode.value"
+                  :class="['mode-button', { active: motionConfig.mode === mode.value }]"
+                  @click="changeMotionMode(mode.value)"
+                  :title="mode.description"
+                >
+                  {{ mode.name }}
+                </button>
+              </div>
+            </div>
+
             <!-- 泛光效果开关 -->
             <div class="control-group">
               <label class="control-label">
@@ -416,6 +435,7 @@
 import { ref, onMounted, onUnmounted, reactive, computed } from 'vue'
 import { AppManager, ParticleComputeMode } from './modules/AppManager'
 import { PRESET_THEMES } from './modules/colors/presets'
+import { MotionMode } from './modules/particles/MotionMode'
 import ErrorBoundary from './components/ErrorBoundary.vue'
 import type { ColorTheme } from './modules/colors/ColorTheme'
 
@@ -479,6 +499,7 @@ const saveConfigToStorage = (): void => {
       ...particleConfig,
       bloom: { ...bloomConfig },
       glow: { ...glowConfig },
+      motion: { ...motionConfig },
       themeName: currentTheme.value.name,
       savedAt: new Date().toISOString()
     }
@@ -520,6 +541,23 @@ const loadConfigFromStorage = (): void => {
         Object.keys(glowConfig).forEach(key => {
           if (config.glow[key] !== undefined) {
             (glowConfig as any)[key] = config.glow[key]
+          }
+        })
+      }
+
+      // 恢复运动模式配置
+      if (config.motion) {
+        Object.keys(motionConfig).forEach(key => {
+          if (config.motion[key] !== undefined) {
+            if (key === 'mode') {
+              // 将字符串转换为 MotionMode 枚举
+              const modeValue = config.motion[key]
+              if (Object.values(MotionMode).includes(modeValue)) {
+                motionConfig[key] = modeValue as MotionMode
+              }
+            } else {
+              (motionConfig as any)[key] = config.motion[key]
+            }
           }
         })
       }
@@ -573,6 +611,30 @@ const glowConfig = reactive({
   enabled: true,
   intensity: 0.5
 })
+
+/**
+ * 运动模式配置
+ */
+const motionConfig = reactive({
+  mode: MotionMode.NOISE_FIELD,
+  lorenz: { sigma: 10.0, rho: 28.0, beta: 8.0 / 3.0 },
+  thomas: { b: 0.208186 },
+  clifford: { a: 1.7, b: 1.7, c: 0.06, d: 1.2 },
+  rossler: { a: 0.2, b: 0.2, c: 5.7 },
+  timeScale: 0.001,
+  particleScale: 0.01
+})
+
+/**
+ * 运动模式列表
+ */
+const motionModes = [
+  { value: MotionMode.NOISE_FIELD, name: '噪声场', description: '基于噪声场的随机运动' },
+  { value: MotionMode.LORENZ, name: 'Lorenz', description: 'Lorenz 吸引子（蝴蝶形状）' },
+  { value: MotionMode.THOMAS, name: 'Thomas', description: 'Thomas 吸引子（三螺旋）' },
+  { value: MotionMode.CLIFFORD, name: 'Clifford', description: 'Clifford 吸引子（复杂图案）' },
+  { value: MotionMode.ROSSLER, name: 'Rossler', description: 'Rossler 吸引子（螺旋结构）' }
+]
 
 /**
  * 性能监控数据
@@ -631,6 +693,41 @@ const changeTheme = (theme: ColorTheme): void => {
     currentTheme.value = theme
     appManager.setColorTheme(theme)
     // 保存主题配置到 localStorage
+    saveConfigToStorage()
+  }
+}
+
+/**
+ * 获取运动模式名称
+ *
+ * @param mode - 运动模式值
+ * @returns 运动模式名称
+ */
+const getMotionModeName = (mode: MotionMode): string => {
+  const modeObj = motionModes.find(m => m.value === mode)
+  return modeObj ? modeObj.name : mode
+}
+
+/**
+ * 切换运动模式
+ *
+ * @param mode - 要切换的运动模式
+ */
+const changeMotionMode = (mode: MotionMode): void => {
+  if (appManager) {
+    motionConfig.mode = mode
+    // 更新粒子系统的运动模式
+    appManager.setMotionMode(mode)
+    // 更新吸引子参数
+    appManager.setAttractorParams({
+      lorenz: motionConfig.lorenz,
+      thomas: motionConfig.thomas,
+      clifford: motionConfig.clifford,
+      rossler: motionConfig.rossler,
+      timeScale: motionConfig.timeScale,
+      particleScale: motionConfig.particleScale
+    })
+    // 保存配置到 localStorage
     saveConfigToStorage()
   }
 }
@@ -732,6 +829,14 @@ const resetConfig = (): void => {
   // 重置发光配置为默认
   glowConfig.enabled = true
   glowConfig.intensity = 0.5
+  // 重置运动模式为默认
+  motionConfig.mode = MotionMode.NOISE_FIELD
+  motionConfig.lorenz = { sigma: 10.0, rho: 28.0, beta: 8.0 / 3.0 }
+  motionConfig.thomas = { b: 0.208186 }
+  motionConfig.clifford = { a: 1.7, b: 1.7, c: 0.06, d: 1.2 }
+  motionConfig.rossler = { a: 0.2, b: 0.2, c: 5.7 }
+  motionConfig.timeScale = 0.001
+  motionConfig.particleScale = 0.01
   // 重置主题为默认
   currentTheme.value = presetThemes[0]
   // 清除 localStorage 中的配置
@@ -739,6 +844,7 @@ const resetConfig = (): void => {
   updateParticleConfig()
   updateBloomConfig()
   updateGlowConfig()
+  changeMotionMode(MotionMode.NOISE_FIELD)
 }
 
 /**
@@ -1899,6 +2005,59 @@ canvas {
   box-shadow: 
     0 4px 12px rgba(99, 102, 241, 0.3),
     0 0 0 1px rgba(255, 255, 255, 0.2);
+}
+
+/**
+ * 运动模式按钮容器
+ */
+.mode-buttons {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 8px;
+}
+
+/**
+ * 运动模式按钮
+ */
+.mode-button {
+  flex: 1;
+  min-width: 80px;
+  padding: 8px 12px;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 8px;
+  color: rgba(255, 255, 255, 0.8);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  letter-spacing: 0.1px;
+}
+
+.mode-button:hover {
+  background: rgba(255, 255, 255, 0.2);
+  border-color: rgba(255, 255, 255, 0.3);
+  color: #ffffff;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+
+.mode-button.active {
+  background: linear-gradient(
+    135deg,
+    rgba(99, 102, 241, 0.8) 0%,
+    rgba(168, 85, 247, 0.8) 100%
+  );
+  border-color: rgba(255, 255, 255, 0.3);
+  color: #ffffff;
+  box-shadow: 
+    0 2px 8px rgba(99, 102, 241, 0.3),
+    0 0 0 1px rgba(255, 255, 255, 0.2);
+}
+
+.mode-button:active {
+  transform: translateY(0);
 }
 
 /**

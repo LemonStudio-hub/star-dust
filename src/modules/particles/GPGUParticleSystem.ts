@@ -17,6 +17,7 @@ import { NoiseTexture } from '../noise/NoiseTexture'
 import { ColorManager } from '../colors/ColorManager'
 import { ColorTheme, DefaultColorTheme } from '../colors/ColorTheme'
 import { GPUComputationRenderer } from 'three/examples/jsm/misc/GPUComputationRenderer.js'
+import { MotionMode, AttractorConfig, DEFAULT_ATTRACTOR_CONFIG } from './MotionMode'
 
 // 着色器代码
 const positionFragmentShader = `
@@ -24,11 +25,35 @@ uniform sampler2D tPosition;
 uniform sampler2D tVelocity;
 uniform sampler2D tNoise;
 uniform float uTime;
+uniform float uDeltaTime;
 uniform float uVelocityScale;
 uniform float uMaxSpeed;
 uniform float uBoundsRadius;
 uniform float uNoiseScale;
 uniform float uTimeScale;
+uniform int uMotionMode;  // 0: NOISE_FIELD, 1: LORENZ, 2: THOMAS
+
+// Lorenz 吸引子参数
+uniform float uLorenzSigma;
+uniform float uLorenzRho;
+uniform float uLorenzBeta;
+
+// Thomas 吸引子参数
+uniform float uThomasB;
+
+// Clifford 吸引子参数
+uniform float uCliffordA;
+uniform float uCliffordB;
+uniform float uCliffordC;
+uniform float uCliffordD;
+
+// Rossler 吸引子参数
+uniform float uRosslerA;
+uniform float uRosslerB;
+uniform float uRosslerC;
+
+// 吸引子缩放参数
+uniform float uParticleScale;
 
 varying vec2 vUv;
 
@@ -64,6 +89,53 @@ vec3 curlNoise(vec3 pos, float time) {
   return vec3(x, y, z) / eps;
 }
 
+vec3 lorenzAttractor(vec3 pos, float dt) {
+  float sigma = uLorenzSigma;
+  float rho = uLorenzRho;
+  float beta = uLorenzBeta;
+  
+  float dx = sigma * (pos.y - pos.x);
+  float dy = pos.x * (rho - pos.z) - pos.y;
+  float dz = pos.x * pos.y - beta * pos.z;
+  
+  return vec3(dx, dy, dz) * dt;
+}
+
+vec3 thomasAttractor(vec3 pos, float dt) {
+  float b = uThomasB;
+  
+  float dx = sin(pos.y) - b * pos.x;
+  float dy = sin(pos.z) - b * pos.y;
+  float dz = sin(pos.x) - b * pos.z;
+  
+  return vec3(dx, dy, dz) * dt;
+}
+
+vec3 cliffordAttractor(vec3 pos, float dt) {
+  float a = uCliffordA;
+  float b = uCliffordB;
+  float c = uCliffordC;
+  float d = uCliffordD;
+  
+  float dx = sin(a * pos.y) + c * cos(a * pos.x);
+  float dy = sin(b * pos.x) + d * cos(b * pos.y);
+  float dz = sin(pos.x) + cos(pos.y) + pos.z * 0.1;
+  
+  return vec3(dx, dy, dz * 0.5) * dt;
+}
+
+vec3 rosslerAttractor(vec3 pos, float dt) {
+  float a = uRosslerA;
+  float b = uRosslerB;
+  float c = uRosslerC;
+  
+  float dx = -pos.y - pos.z;
+  float dy = pos.x + a * pos.y;
+  float dz = b + pos.z * (pos.x - c);
+  
+  return vec3(dx, dy, dz) * dt;
+}
+
 void main() {
   vec4 position = texture2D(tPosition, vUv);
   vec4 velocity = texture2D(tVelocity, vUv);
@@ -71,10 +143,27 @@ void main() {
   vec3 pos = position.rgb;
   vec3 vel = velocity.rgb;
 
-  vec3 curl = curlNoise(pos, uTime);
-
-  // 更新速度（不使用 deltaTime，与 CPU 模式保持一致）
-  vel += curl * uVelocityScale;
+  // 根据运动模式计算速度
+  if (uMotionMode == 1) {  // LORENZ
+    vec3 scaledPos = pos / uParticleScale;
+    vec3 attractorVel = lorenzAttractor(scaledPos, uDeltaTime);
+    vel = vel * 0.9 + attractorVel;
+  } else if (uMotionMode == 2) {  // THOMAS
+    vec3 scaledPos = pos / uParticleScale;
+    vec3 attractorVel = thomasAttractor(scaledPos, uDeltaTime);
+    vel = vel * 0.9 + attractorVel;
+  } else if (uMotionMode == 3) {  // CLIFFORD
+    vec3 scaledPos = pos / uParticleScale;
+    vec3 attractorVel = cliffordAttractor(scaledPos, uDeltaTime);
+    vel = vel * 0.9 + attractorVel;
+  } else if (uMotionMode == 4) {  // ROSSLER
+    vec3 scaledPos = pos / uParticleScale;
+    vec3 attractorVel = rosslerAttractor(scaledPos, uDeltaTime);
+    vel = vel * 0.9 + attractorVel;
+  } else {  // NOISE_FIELD
+    vec3 curl = curlNoise(pos, uTime);
+    vel += curl * uVelocityScale;
+  }
 
   // 限制最大速度
   float speed = length(vel);
@@ -82,21 +171,32 @@ void main() {
     vel = normalize(vel) * uMaxSpeed;
   }
 
-  // 更新位置（不使用 deltaTime，与 CPU 模式保持一致）
+  // 更新位置
   pos += vel;
 
   // 边界检测
   float dist = length(pos);
   if (dist > uBoundsRadius) {
-    // 重置到中心附近，但保持一个最小距离
-    pos = normalize(pos) * (uBoundsRadius * 0.05 + 0.5);
-
-    // 重置速度（与 CPU 模式保持一致：均匀随机分布，0.05 大小）
-    vel = vec3(
-      (random(vUv) - 0.5) * 0.05,
-      (random(vUv + 0.1) - 0.5) * 0.05,
-      (random(vUv + 0.2) - 0.5) * 0.05
-    );
+    if (uMotionMode == 1 || uMotionMode == 2 || uMotionMode == 3 || uMotionMode == 4) {
+      // 吸引子模式：重置到吸引子中心附近
+      float angle = random(vUv) * 6.28318;
+      float radius = random(vUv + 0.1) * 5.0;
+      pos = vec3(
+        radius * cos(angle),
+        radius * sin(angle),
+        random(vUv + 0.2) * 2.0 - 1.0
+      );
+      vel = vec3(0.0);
+    } else {
+      // 噪声场模式：重置到中心并赋予随机速度
+      pos = normalize(pos) * (uBoundsRadius * 0.05 + 0.5);
+      
+      vel = vec3(
+        (random(vUv) - 0.5) * 0.05,
+        (random(vUv + 0.1) - 0.5) * 0.05,
+        (random(vUv + 0.2) - 0.5) * 0.05
+      );
+    }
   }
 
   gl_FragColor = vec4(pos, 1.0);
@@ -211,6 +311,10 @@ export interface GPGUParticleConfig {
   enableGlow?: boolean
   /** 发光强度（0-2） */
   glowIntensity?: number
+  /** 运动模式 */
+  motionMode?: MotionMode
+  /** 吸引子配置 */
+  attractorConfig?: AttractorConfig
 }
 
 /**
@@ -269,8 +373,6 @@ export class GPGUParticleSystem {
   /** 粒子位置数组（用于读取 GPU 结果） */
   // @ts-expect-error - Reserved for future use
   private _positions: Float32Array | null = null
-  /** 首次渲染标记 */
-  private firstRender: boolean = true
   /** 更新计数器（用于调试） */
   private updateCount: number = 0
   /** 基础粒子大小 */
@@ -296,6 +398,10 @@ export class GPGUParticleSystem {
   private enableGlow: boolean
   /** 发光强度 */
   private glowIntensity: number
+  /** 运动模式 */
+  private motionMode: MotionMode
+  /** 吸引子配置 */
+  private attractorConfig: AttractorConfig
 
   /**
    * 构造函数
@@ -339,6 +445,10 @@ export class GPGUParticleSystem {
     // 初始化发光参数
     this.enableGlow = config.enableGlow ?? true
     this.glowIntensity = config.glowIntensity ?? 0.5
+
+    // 初始化运动模式和吸引子配置
+    this.motionMode = config.motionMode ?? MotionMode.NOISE_FIELD
+    this.attractorConfig = config.attractorConfig ?? DEFAULT_ATTRACTOR_CONFIG
 
     // 初始化 GPU 计算渲染器
     const textureWidth = Math.ceil(Math.sqrt(config.count))
@@ -547,6 +657,21 @@ export class GPGUParticleSystem {
     this.positionVariable.material.uniforms.uTimeScale = { value: this.config.timeScale }
     this.positionVariable.material.uniforms.uTime = { value: 0 }
     this.positionVariable.material.uniforms.uDeltaTime = { value: 0 }
+    
+    // 运动模式和吸引子参数 uniforms
+    this.positionVariable.material.uniforms.uMotionMode = { value: this.getMotionModeValue(this.motionMode) }
+    this.positionVariable.material.uniforms.uLorenzSigma = { value: this.attractorConfig.lorenz?.sigma ?? 10.0 }
+    this.positionVariable.material.uniforms.uLorenzRho = { value: this.attractorConfig.lorenz?.rho ?? 28.0 }
+    this.positionVariable.material.uniforms.uLorenzBeta = { value: this.attractorConfig.lorenz?.beta ?? 8.0 / 3.0 }
+    this.positionVariable.material.uniforms.uThomasB = { value: this.attractorConfig.thomas?.b ?? 0.208186 }
+    this.positionVariable.material.uniforms.uCliffordA = { value: this.attractorConfig.clifford?.a ?? 1.7 }
+    this.positionVariable.material.uniforms.uCliffordB = { value: this.attractorConfig.clifford?.b ?? 1.7 }
+    this.positionVariable.material.uniforms.uCliffordC = { value: this.attractorConfig.clifford?.c ?? 0.06 }
+    this.positionVariable.material.uniforms.uCliffordD = { value: this.attractorConfig.clifford?.d ?? 1.2 }
+    this.positionVariable.material.uniforms.uRosslerA = { value: this.attractorConfig.rossler?.a ?? 0.2 }
+    this.positionVariable.material.uniforms.uRosslerB = { value: this.attractorConfig.rossler?.b ?? 0.2 }
+    this.positionVariable.material.uniforms.uRosslerC = { value: this.attractorConfig.rossler?.c ?? 5.7 }
+    this.positionVariable.material.uniforms.uParticleScale = { value: this.attractorConfig.particleScale ?? 0.01 }
 
     // 速度变量 uniforms
     this.velocityVariable.material.uniforms.tNoise = { value: this.noiseTexture.createTexture() }
@@ -631,7 +756,14 @@ export class GPGUParticleSystem {
         uFogColor: { value: new THREE.Vector3(...this.fogColor) },
         uEnableGlow: { value: this.enableGlow },
         uGlowIntensity: { value: this.glowIntensity },
-        uTime: { value: 0 }
+        uTime: { value: 0 },
+        uMotionMode: { value: 0 },
+        uLorenzSigma: { value: 10.0 },
+        uLorenzRho: { value: 28.0 },
+        uLorenzBeta: { value: 8.0 / 3.0 },
+        uThomasB: { value: 0.208186 },
+        uParticleScale: { value: 0.01 },
+        uDeltaTime: { value: 0.016 }
       },
       vertexShader: `
         uniform sampler2D tPosition;
@@ -792,6 +924,9 @@ export class GPGUParticleSystem {
       if (this.positionVariable && this.velocityVariable) {
         this.positionVariable.material.uniforms.uTime.value = time
         this.velocityVariable.material.uniforms.uTime.value = time
+        // 更新 delta time（用于吸引子计算）
+        const dt = deltaTime * 0.001 * this.attractorConfig.timeScale
+        this.positionVariable.material.uniforms.uDeltaTime.value = dt
       }
 
       // 执行 GPU 计算
@@ -897,6 +1032,31 @@ export class GPGUParticleSystem {
       colorAttribute.needsUpdate = true
     } catch (error) {
       console.error('更新粒子颜色时发生错误:', error)
+    }
+  }
+
+  /**
+   * 获取运动模式对应的着色器整数值
+   *
+   * @param mode - 运动模式
+   * @returns 着色器中的整数值（0: NOISE_FIELD, 1: LORENZ, 2: THOMAS, 3: CLIFFORD, 4: ROSSLER, 5: HYBRID）
+   */
+  private getMotionModeValue(mode: MotionMode): number {
+    switch (mode) {
+      case MotionMode.NOISE_FIELD:
+        return 0
+      case MotionMode.LORENZ:
+        return 1
+      case MotionMode.THOMAS:
+        return 2
+      case MotionMode.CLIFFORD:
+        return 3
+      case MotionMode.ROSSLER:
+        return 4
+      case MotionMode.HYBRID:
+        return 5
+      default:
+        return 0
     }
   }
 
@@ -1185,6 +1345,49 @@ export class GPGUParticleSystem {
         this.glowIntensity = config.glowIntensity
         if (this.points.material instanceof THREE.ShaderMaterial) {
           this.points.material.uniforms.uGlowIntensity.value = this.glowIntensity
+        }
+      }
+
+      // 更新运动模式
+      if (config.motionMode !== undefined) {
+        this.motionMode = config.motionMode
+        if (this.positionVariable) {
+          const modeValue = this.getMotionModeValue(this.motionMode)
+          this.positionVariable.material.uniforms.uMotionMode.value = modeValue
+        }
+      }
+
+      // 更新吸引子配置
+      if (config.attractorConfig !== undefined) {
+        this.attractorConfig = { ...this.attractorConfig, ...config.attractorConfig }
+        if (this.positionVariable) {
+          // 更新 Lorenz 参数
+          if (this.attractorConfig.lorenz) {
+            this.positionVariable.material.uniforms.uLorenzSigma.value = this.attractorConfig.lorenz.sigma ?? 10.0
+            this.positionVariable.material.uniforms.uLorenzRho.value = this.attractorConfig.lorenz.rho ?? 28.0
+            this.positionVariable.material.uniforms.uLorenzBeta.value = this.attractorConfig.lorenz.beta ?? 8.0 / 3.0
+          }
+          // 更新 Thomas 参数
+          if (this.attractorConfig.thomas) {
+            this.positionVariable.material.uniforms.uThomasB.value = this.attractorConfig.thomas.b ?? 0.208186
+          }
+          // 更新 Clifford 参数
+          if (this.attractorConfig.clifford) {
+            this.positionVariable.material.uniforms.uCliffordA.value = this.attractorConfig.clifford.a ?? 1.7
+            this.positionVariable.material.uniforms.uCliffordB.value = this.attractorConfig.clifford.b ?? 1.7
+            this.positionVariable.material.uniforms.uCliffordC.value = this.attractorConfig.clifford.c ?? 0.06
+            this.positionVariable.material.uniforms.uCliffordD.value = this.attractorConfig.clifford.d ?? 1.2
+          }
+          // 更新 Rossler 参数
+          if (this.attractorConfig.rossler) {
+            this.positionVariable.material.uniforms.uRosslerA.value = this.attractorConfig.rossler.a ?? 0.2
+            this.positionVariable.material.uniforms.uRosslerB.value = this.attractorConfig.rossler.b ?? 0.2
+            this.positionVariable.material.uniforms.uRosslerC.value = this.attractorConfig.rossler.c ?? 5.7
+          }
+          // 更新粒子缩放
+          if (this.attractorConfig.particleScale !== undefined) {
+            this.positionVariable.material.uniforms.uParticleScale.value = this.attractorConfig.particleScale
+          }
         }
       }
     } catch (error) {

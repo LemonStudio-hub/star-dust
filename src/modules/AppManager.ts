@@ -18,6 +18,7 @@ import { BloomConfig } from './renderer/PostProcessingManager'
 import { ColorManager } from './colors/ColorManager'
 import { ColorTheme } from './colors/ColorTheme'
 import { PositionBasedTheme } from './colors/presets/PositionBased'
+import { MotionMode, AttractorConfig } from './particles/MotionMode'
 
 /**
  * 粒子计算模式
@@ -125,7 +126,9 @@ export class AppManager {
   /** 噪声纹理 */
   private noiseTexture!: NoiseTexture
   /** 粒子系统（CPU 或 GPU） */
-  private particleSystem!: ParticleSystem | GPGUParticleSystem
+  public particleSystem!: ParticleSystem | GPGUParticleSystem
+  /** GPU 粒子系统（仅在 GPU 模式下可用） */
+  public gpgpuParticleSystem: GPGUParticleSystem | null = null
   /** 鼠标交互 */
   private mouseInteraction!: MouseInteraction
   /** 触摸交互 */
@@ -445,6 +448,7 @@ export class AppManager {
           this.noiseTexture,
           true
         )
+        this.gpgpuParticleSystem = this.particleSystem as GPGUParticleSystem
       } else {
         // CPU 模式
         const particleConfig: ParticleConfig = {
@@ -466,6 +470,7 @@ export class AppManager {
           fogColor: config.fogColor
         }
         this.particleSystem = new ParticleSystem(this.renderer.scene, particleConfig, this.noiseTexture)
+        this.gpgpuParticleSystem = null
       }
 
       // 步骤 4：初始化交互系统
@@ -715,6 +720,7 @@ export class AppManager {
           this.noiseTexture,
           true
         )
+        this.gpgpuParticleSystem = this.particleSystem as GPGUParticleSystem
       } else {
         // CPU 模式
         const particleConfig: ParticleConfig = {
@@ -733,6 +739,7 @@ export class AppManager {
           parallaxStrength: this.savedConfig.parallaxStrength
         }
         this.particleSystem = new ParticleSystem(this.renderer.scene, particleConfig, this.noiseTexture)
+        this.gpgpuParticleSystem = null
       }
 
       // 重新启动渲染循环
@@ -1200,6 +1207,73 @@ export class AppManager {
       }
     } catch (error) {
       console.error('更新配置时发生错误:', error)
+    }
+  }
+
+  /**
+   * 设置运动模式
+   *
+   * @param mode - 运动模式（noise_field, lorenz, thomas, clifford, rossler, hybrid）
+   */
+  setMotionMode(mode: MotionMode): void {
+    try {
+      const currentConfig = this.particleSystem.getConfig()
+      const currentTimeScale = currentConfig.attractorConfig?.timeScale ?? 0.001
+      const currentParticleScale = currentConfig.attractorConfig?.particleScale ?? 0.01
+
+      if (this.computeMode === ParticleComputeMode.GPU) {
+        this.particleSystem.updateConfig({
+          motionMode: mode,
+          attractorConfig: {
+            motionMode: mode,
+            timeScale: currentTimeScale,
+            particleScale: currentParticleScale
+          }
+        })
+      } else {
+        this.particleSystem.updateConfig({
+          motionMode: mode,
+          attractorConfig: {
+            motionMode: mode,
+            timeScale: currentTimeScale,
+            particleScale: currentParticleScale
+          }
+        })
+      }
+    } catch (error) {
+      console.error('设置运动模式时发生错误:', error)
+    }
+  }
+
+  /**
+   * 设置吸引子参数
+   *
+   * @param params - 吸引子参数
+   */
+  setAttractorParams(params: {
+    lorenz?: { sigma?: number; rho?: number; beta?: number }
+    thomas?: { b?: number }
+    timeScale?: number
+    particleScale?: number
+  }): void {
+    try {
+      if (this.computeMode === ParticleComputeMode.GPU) {
+        this.particleSystem.updateConfig({
+          attractorConfig: {
+            ...params,
+            motionMode: this.particleSystem.getConfig().motionMode ?? MotionMode.NOISE_FIELD
+          } as AttractorConfig
+        })
+      } else {
+        this.particleSystem.updateConfig({
+          attractorConfig: {
+            ...params,
+            motionMode: this.particleSystem.getConfig().motionMode ?? MotionMode.NOISE_FIELD
+          } as AttractorConfig
+        })
+      }
+    } catch (error) {
+      console.error('设置吸引子参数时发生错误:', error)
     }
   }
 
