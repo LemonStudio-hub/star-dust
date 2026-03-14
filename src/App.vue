@@ -812,9 +812,9 @@ const particleConfig = reactive({ ...defaultConfig })
  */
 const bloomConfig = reactive({
   enabled: true,
-  strength: 1.5,
-  radius: 0.4,
-  threshold: 0.85
+  strength: 0.8,
+  radius: 0.3,
+  threshold: 0.9
 })
 
 /**
