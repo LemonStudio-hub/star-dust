@@ -401,6 +401,219 @@
                 class="control-slider"
               >
             </div>
+
+            <!-- Lorenz 吸引子参数 -->
+            <div class="control-group" v-if="motionConfig.mode === MotionMode.LORENZ">
+              <label class="control-label">
+                <span class="label-text">Lorenz Sigma (σ)</span>
+                <span class="label-value">{{ motionConfig.lorenz.sigma.toFixed(2) }}</span>
+              </label>
+              <input 
+                type="range" 
+                v-model.number="motionConfig.lorenz.sigma" 
+                min="1" 
+                max="20" 
+                step="0.5"
+                @input="updateAttractorParams"
+                class="control-slider"
+              >
+            </div>
+
+            <div class="control-group" v-if="motionConfig.mode === MotionMode.LORENZ">
+              <label class="control-label">
+                <span class="label-text">Lorenz Rho (ρ)</span>
+                <span class="label-value">{{ motionConfig.lorenz.rho.toFixed(2) }}</span>
+              </label>
+              <input 
+                type="range" 
+                v-model.number="motionConfig.lorenz.rho" 
+                min="10" 
+                max="50" 
+                step="1"
+                @input="updateAttractorParams"
+                class="control-slider"
+              >
+            </div>
+
+            <div class="control-group" v-if="motionConfig.mode === MotionMode.LORENZ">
+              <label class="control-label">
+                <span class="label-text">Lorenz Beta (β)</span>
+                <span class="label-value">{{ motionConfig.lorenz.beta.toFixed(3) }}</span>
+              </label>
+              <input 
+                type="range" 
+                v-model.number="motionConfig.lorenz.beta" 
+                min="1" 
+                max="5" 
+                step="0.1"
+                @input="updateAttractorParams"
+                class="control-slider"
+              >
+            </div>
+
+            <!-- Thomas 吸引子参数 -->
+            <div class="control-group" v-if="motionConfig.mode === MotionMode.THOMAS">
+              <label class="control-label">
+                <span class="label-text">Thomas B</span>
+                <span class="label-value">{{ motionConfig.thomas.b.toFixed(4) }}</span>
+              </label>
+              <input 
+                type="range" 
+                v-model.number="motionConfig.thomas.b" 
+                min="0.01" 
+                max="0.5" 
+                step="0.01"
+                @input="updateAttractorParams"
+                class="control-slider"
+              >
+            </div>
+
+            <!-- Clifford 吸引子参数 -->
+            <div class="control-group" v-if="motionConfig.mode === MotionMode.CLIFFORD">
+              <label class="control-label">
+                <span class="label-text">Clifford A</span>
+                <span class="label-value">{{ motionConfig.clifford.a.toFixed(2) }}</span>
+              </label>
+              <input 
+                type="range" 
+                v-model.number="motionConfig.clifford.a" 
+                min="0.5" 
+                max="3" 
+                step="0.1"
+                @input="updateAttractorParams"
+                class="control-slider"
+              >
+            </div>
+
+            <div class="control-group" v-if="motionConfig.mode === MotionMode.CLIFFORD">
+              <label class="control-label">
+                <span class="label-text">Clifford B</span>
+                <span class="label-value">{{ motionConfig.clifford.b.toFixed(2) }}</span>
+              </label>
+              <input 
+                type="range" 
+                v-model.number="motionConfig.clifford.b" 
+                min="0.5" 
+                max="3" 
+                step="0.1"
+                @input="updateAttractorParams"
+                class="control-slider"
+              >
+            </div>
+
+            <div class="control-group" v-if="motionConfig.mode === MotionMode.CLIFFORD">
+              <label class="control-label">
+                <span class="label-text">Clifford C</span>
+                <span class="label-value">{{ motionConfig.clifford.c.toFixed(3) }}</span>
+              </label>
+              <input 
+                type="range" 
+                v-model.number="motionConfig.clifford.c" 
+                min="0.01" 
+                max="0.5" 
+                step="0.01"
+                @input="updateAttractorParams"
+                class="control-slider"
+              >
+            </div>
+
+            <div class="control-group" v-if="motionConfig.mode === MotionMode.CLIFFORD">
+              <label class="control-label">
+                <span class="label-text">Clifford D</span>
+                <span class="label-value">{{ motionConfig.clifford.d.toFixed(2) }}</span>
+              </label>
+              <input 
+                type="range" 
+                v-model.number="motionConfig.clifford.d" 
+                min="0.5" 
+                max="3" 
+                step="0.1"
+                @input="updateAttractorParams"
+                class="control-slider"
+              >
+            </div>
+
+            <!-- Rossler 吸引子参数 -->
+            <div class="control-group" v-if="motionConfig.mode === MotionMode.ROSSLER">
+              <label class="control-label">
+                <span class="label-text">Rossler A</span>
+                <span class="label-value">{{ motionConfig.rossler.a.toFixed(3) }}</span>
+              </label>
+              <input 
+                type="range" 
+                v-model.number="motionConfig.rossler.a" 
+                min="0.01" 
+                max="0.5" 
+                step="0.01"
+                @input="updateAttractorParams"
+                class="control-slider"
+              >
+            </div>
+
+            <div class="control-group" v-if="motionConfig.mode === MotionMode.ROSSLER">
+              <label class="control-label">
+                <span class="label-text">Rossler B</span>
+                <span class="label-value">{{ motionConfig.rossler.b.toFixed(3) }}</span>
+              </label>
+              <input 
+                type="range" 
+                v-model.number="motionConfig.rossler.b" 
+                min="0.01" 
+                max="0.5" 
+                step="0.01"
+                @input="updateAttractorParams"
+                class="control-slider"
+              >
+            </div>
+
+            <div class="control-group" v-if="motionConfig.mode === MotionMode.ROSSLER">
+              <label class="control-label">
+                <span class="label-text">Rossler C</span>
+                <span class="label-value">{{ motionConfig.rossler.c.toFixed(2) }}</span>
+              </label>
+              <input 
+                type="range" 
+                v-model.number="motionConfig.rossler.c" 
+                min="1" 
+                max="10" 
+                step="0.5"
+                @input="updateAttractorParams"
+                class="control-slider"
+              >
+            </div>
+
+            <!-- 时间和粒子缩放 -->
+            <div class="control-group" v-if="motionConfig.mode !== MotionMode.NOISE_FIELD">
+              <label class="control-label">
+                <span class="label-text">时间缩放</span>
+                <span class="label-value">{{ motionConfig.timeScale.toFixed(4) }}</span>
+              </label>
+              <input 
+                type="range" 
+                v-model.number="motionConfig.timeScale" 
+                min="0.0001" 
+                max="0.01" 
+                step="0.0001"
+                @input="updateAttractorParams"
+                class="control-slider"
+              >
+            </div>
+
+            <div class="control-group" v-if="motionConfig.mode !== MotionMode.NOISE_FIELD">
+              <label class="control-label">
+                <span class="label-text">粒子缩放</span>
+                <span class="label-value">{{ motionConfig.particleScale.toFixed(4) }}</span>
+              </label>
+              <input 
+                type="range" 
+                v-model.number="motionConfig.particleScale" 
+                min="0.001" 
+                max="0.1" 
+                step="0.001"
+                @input="updateAttractorParams"
+                class="control-slider"
+              >
+            </div>
           </div>
 
           <div class="dashboard-footer">
@@ -633,7 +846,8 @@ const motionModes = [
   { value: MotionMode.LORENZ, name: 'Lorenz', description: 'Lorenz 吸引子（蝴蝶形状）' },
   { value: MotionMode.THOMAS, name: 'Thomas', description: 'Thomas 吸引子（三螺旋）' },
   { value: MotionMode.CLIFFORD, name: 'Clifford', description: 'Clifford 吸引子（复杂图案）' },
-  { value: MotionMode.ROSSLER, name: 'Rossler', description: 'Rossler 吸引子（螺旋结构）' }
+  { value: MotionMode.ROSSLER, name: 'Rossler', description: 'Rossler 吸引子（螺旋结构）' },
+  { value: MotionMode.HYBRID, name: '混合', description: '噪声场与吸引子混合' }
 ]
 
 /**
@@ -719,6 +933,24 @@ const changeMotionMode = (mode: MotionMode): void => {
     // 更新粒子系统的运动模式
     appManager.setMotionMode(mode)
     // 更新吸引子参数
+    appManager.setAttractorParams({
+      lorenz: motionConfig.lorenz,
+      thomas: motionConfig.thomas,
+      clifford: motionConfig.clifford,
+      rossler: motionConfig.rossler,
+      timeScale: motionConfig.timeScale,
+      particleScale: motionConfig.particleScale
+    })
+    // 保存配置到 localStorage
+    saveConfigToStorage()
+  }
+}
+
+/**
+ * 更新吸引子参数
+ */
+const updateAttractorParams = (): void => {
+  if (appManager) {
     appManager.setAttractorParams({
       lorenz: motionConfig.lorenz,
       thomas: motionConfig.thomas,

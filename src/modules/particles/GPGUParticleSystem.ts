@@ -160,6 +160,15 @@ void main() {
     vec3 scaledPos = pos / uParticleScale;
     vec3 attractorVel = rosslerAttractor(scaledPos, uDeltaTime);
     vel = vel * 0.9 + attractorVel;
+  } else if (uMotionMode == 5) {  // HYBRID
+    // 混合噪声场和吸引子（默认使用 Lorenz）
+    vec3 curl = curlNoise(pos, uTime);
+    vec3 scaledPos = pos / uParticleScale;
+    vec3 attractorVel = lorenzAttractor(scaledPos, uDeltaTime);
+    
+    // 混合比例：30% 吸引子，70% 噪声场
+    float hybridRatio = 0.3;
+    vel += curl * uVelocityScale * (1.0 - hybridRatio) + attractorVel * hybridRatio;
   } else {  // NOISE_FIELD
     vec3 curl = curlNoise(pos, uTime);
     vel += curl * uVelocityScale;
@@ -177,7 +186,7 @@ void main() {
   // 边界检测
   float dist = length(pos);
   if (dist > uBoundsRadius) {
-    if (uMotionMode == 1 || uMotionMode == 2 || uMotionMode == 3 || uMotionMode == 4) {
+    if (uMotionMode == 1 || uMotionMode == 2 || uMotionMode == 3 || uMotionMode == 4 || uMotionMode == 5) {
       // 吸引子模式：重置到吸引子中心附近
       float angle = random(vUv) * 6.28318;
       float radius = random(vUv + 0.1) * 5.0;

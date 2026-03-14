@@ -725,6 +725,63 @@ export class ParticleSystem {
   }
 
   /**
+   * 更新粒子系统（混合模式）
+   * 
+   * 混合噪声场和吸引子，产生更复杂的运动效果。
+   * 
+   * @param positions - 粒子位置数组
+   * @param time - 当前时间
+   * @private
+   */
+  private updateWithHybrid(positions: Float32Array, time: number): void {
+    const dt = 0.001 * this.attractorConfig.timeScale  // 使用固定的时间步长
+    const scale = this.attractorConfig.particleScale
+    const hybridRatio = 0.3  // 吸引子影响比例，0.3表示30%吸引子，70%噪声场
+    
+    for (let i = 0; i < positions.length; i += 3) {
+      const x = positions[i]
+      const y = positions[i + 1]
+      const z = positions[i + 2]
+      
+      // 从噪声纹理采样速度向量
+      const curl = this.noiseTexture.sample(x, y, z, time)
+      
+      // 计算吸引子速度（默认使用 Lorenz）
+      const scaledX = x / scale
+      const scaledY = y / scale
+      const scaledZ = z / scale
+      
+      let attractorVel: {dx: number, dy: number, dz: number}
+      
+      // 根据配置选择吸引子类型
+      if (this.attractorConfig.lorenz) {
+        attractorVel = this.calculateLorenz(scaledX, scaledY, scaledZ, dt)
+      } else if (this.attractorConfig.thomas) {
+        attractorVel = this.calculateThomas(scaledX, scaledY, scaledZ, dt)
+      } else {
+        // 默认使用 Lorenz
+        attractorVel = this.calculateLorenz(scaledX, scaledY, scaledZ, dt)
+      }
+      
+      // 混合噪声场和吸引子速度
+      this.velocities![i] += curl.x * this.config.velocityScale * (1 - hybridRatio) + attractorVel.dx * hybridRatio
+      this.velocities![i + 1] += curl.y * this.config.velocityScale * (1 - hybridRatio) + attractorVel.dy * hybridRatio
+      this.velocities![i + 2] += curl.z * this.config.velocityScale * (1 - hybridRatio) + attractorVel.dz * hybridRatio
+      
+      // 限制最大速度
+      this.limitVelocity(i)
+      
+      // 更新位置
+      positions[i] += this.velocities![i]
+      positions[i + 1] += this.velocities![i + 1]
+      positions[i + 2] += this.velocities![i + 2]
+      
+      // 边界检测
+      this.checkBoundary(i)
+    }
+  }
+
+  /**
    * 限制速度
    * 
    * @param i - 粒子索引（起始位置）
@@ -830,6 +887,9 @@ export class ParticleSystem {
               break
             case MotionMode.ROSSLER:
               this.updateWithRossler(positions, dt)
+              break
+            case MotionMode.HYBRID:
+              this.updateWithHybrid(positions, time)
               break
             case MotionMode.NOISE_FIELD:
             default:
