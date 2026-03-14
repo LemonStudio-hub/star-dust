@@ -821,7 +821,7 @@ const bloomConfig = reactive({
  * 发光粒子效果配置
  */
 const glowConfig = reactive({
-  enabled: true,
+  enabled: false,
   intensity: 0.2
 })
 
