@@ -71,8 +71,9 @@ const handleUnhandledRejection = (event: PromiseRejectionEvent) => {
 window.addEventListener('error', handleGlobalError)
 eventListeners.push({ target: window, type: 'error', listener: handleGlobalError })
 
-window.addEventListener('unhandledrejection', handleUnhandledRejection)
-eventListeners.push({ target: window, type: 'unhandledrejection', listener: handleUnhandledRejection })
+// 使用类型断言来解决 TypeScript 类型限制
+window.addEventListener('unhandledrejection', handleUnhandledRejection as EventListener)
+eventListeners.push({ target: window, type: 'unhandledrejection', listener: handleUnhandledRejection as EventListener })
 
 app.mount('#app')
 
