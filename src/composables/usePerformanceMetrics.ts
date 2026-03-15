@@ -66,8 +66,9 @@ export function usePerformanceMetrics() {
    */
   const updateAdvancedMetrics = (): void => {
     // 更新内存使用
-    if (performance.memory) {
-      const memoryMB = Math.round(performance.memory.usedJSHeapSize / 1024 / 1024)
+    const perfMemory = (performance as any).memory
+    if (perfMemory) {
+      const memoryMB = Math.round(perfMemory.usedJSHeapSize / 1024 / 1024)
       perfMetrics.memory = memoryMB
       perfMetrics.memoryText = `${memoryMB} MB`
     } else {

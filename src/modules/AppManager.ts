@@ -18,7 +18,7 @@ import { BloomConfig } from './renderer/PostProcessingManager'
 import { ColorManager } from './colors/ColorManager'
 import { ColorTheme } from './colors/ColorTheme'
 import { PositionBasedTheme } from './colors/presets/PositionBased'
-import { MotionMode, AttractorConfig } from './particles/MotionMode'
+import { MotionMode, AttractorConfig, DEFAULT_ATTRACTOR_CONFIG } from './particles/MotionMode'
 
 /**
  * 粒子计算模式
@@ -1278,10 +1278,10 @@ export class AppManager {
       // 合并参数，只更新传入的参数
       const newAttractorConfig: AttractorConfig = {
         motionMode: currentMotionMode,
-        lorenz: params.lorenz ?? currentAttractorConfig.lorenz,
-        thomas: params.thomas ?? currentAttractorConfig.thomas,
-        clifford: params.clifford ?? currentAttractorConfig.clifford,
-        rossler: params.rossler ?? currentAttractorConfig.rossler,
+        lorenz: params.lorenz ? { ...currentAttractorConfig.lorenz, ...params.lorenz } as any : currentAttractorConfig.lorenz,
+        thomas: params.thomas ? { ...currentAttractorConfig.thomas, ...params.thomas } as any : currentAttractorConfig.thomas,
+        clifford: params.clifford ? { ...currentAttractorConfig.clifford, ...params.clifford } as any : currentAttractorConfig.clifford,
+        rossler: params.rossler ? { ...currentAttractorConfig.rossler, ...params.rossler } as any : currentAttractorConfig.rossler,
         timeScale: params.timeScale ?? currentAttractorConfig.timeScale,
         particleScale: params.particleScale ?? currentAttractorConfig.particleScale
       }

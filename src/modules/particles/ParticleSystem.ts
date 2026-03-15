@@ -13,7 +13,6 @@ import { ColorManager } from '../colors/ColorManager'
 import { ColorTheme, DefaultColorTheme } from '../colors/ColorTheme'
 import { TrailManager, TrailConfig } from './TrailManager'
 import { MotionMode, AttractorConfig, DEFAULT_ATTRACTOR_CONFIG } from './MotionMode'
-import { AttractorFactory } from '../attractors/AttractorFactory'
 
 /**
  * 粒子系统配置接口

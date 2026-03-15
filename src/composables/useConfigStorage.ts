@@ -1,4 +1,4 @@
-import { reactive } from 'vue'
+
 import { MotionMode } from '../modules/particles/MotionMode'
 import type { ColorTheme } from '../modules/colors/ColorTheme'
 
@@ -99,7 +99,7 @@ export function useConfigStorage() {
     glowConfig: any,
     motionConfig: any,
     presetThemes: ColorTheme[]
-  ): { success: boolean } => {
+  ): { success: boolean; theme?: ColorTheme } => {
     try {
       const savedConfig = localStorage.getItem(STORAGE_KEY)
       if (savedConfig) {
