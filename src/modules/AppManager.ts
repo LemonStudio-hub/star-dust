@@ -918,7 +918,7 @@ export class AppManager {
    * ```
    */
   setGlowConfig(config: { enabled?: boolean; intensity?: number }): void {
-    const updateConfig: any = {}
+    const updateConfig: { enableGlow?: boolean; glowIntensity?: number } = {}
     if (config.enabled !== undefined) {
       updateConfig.enableGlow = config.enabled
     }

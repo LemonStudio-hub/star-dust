@@ -5,6 +5,7 @@
  * 依赖 GPUComputationRenderer 来管理 GPU 计算。
  *
  * 主要优势：
+import type { GPGPUVariable } from './GPGPUVariableTypes'
  * - 支持 100,000+ 粒子流畅运行
  * - CPU 使用率极低（5-10%）
  * - 实现复杂的物理模拟
@@ -359,9 +360,9 @@ export class GPGUParticleSystem {
   /** GPU 计算渲染器 */
   private gpgpu: GPUComputationRenderer
   /** 位置变量 */
-  private positionVariable: any = null
+  private positionVariable: GPGPUVariable | null = null
   /** 速度变量 */
-  private velocityVariable: any = null
+  private velocityVariable: GPGPUVariable | null = null
   /** 粒子系统配置 */
   private config: GPGUParticleConfig
   /** 噪声纹理 */

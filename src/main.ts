@@ -29,20 +29,34 @@ app.config.warnHandler = (msg, instance, trace) => {
   })
 }
 
-// 全局未捕获错误监听
-window.addEventListener('error', (event) => {
-  console.error('[全局错误]', {
-    message: event.message,
-    filename: event.filename,
-    lineno: event.lineno,
-    colno: event.colno,
-    error: event.error,
-    timestamp: new Date().toISOString()
-  })
-})
+// 存储事件监听器引用，便于后续移除
+const eventListeners: Array<{ target: EventTarget; type: string; listener: EventListener }> = []
 
-// 全局未捕获的 Promise 拒绝
-window.addEventListener('unhandledrejection', (event) => {
+// 全局错误监听器（合并所有错误类型）
+const handleGlobalError = (event: Event) => {
+  const errorEvent = event as ErrorEvent
+  
+  // 检查是否是资源加载错误
+  if (errorEvent.target && (errorEvent.target as HTMLElement).tagName) {
+    console.error('[资源加载错误]', {
+      element: (errorEvent.target as HTMLElement).tagName,
+      source: (errorEvent.target as HTMLElement).getAttribute('src'),
+      timestamp: new Date().toISOString()
+    })
+  } else {
+    console.error('[全局错误]', {
+      message: errorEvent.message,
+      filename: errorEvent.filename,
+      lineno: errorEvent.lineno,
+      colno: errorEvent.colno,
+      error: errorEvent.error,
+      timestamp: new Date().toISOString()
+    })
+  }
+}
+
+// 全局未捕获的 Promise 拒绝监听器
+const handleUnhandledRejection = (event: PromiseRejectionEvent) => {
   console.error('[未捕获的 Promise 拒绝]', {
     reason: event.reason,
     promise: event.promise,
@@ -51,20 +65,27 @@ window.addEventListener('unhandledrejection', (event) => {
   
   // 阻止默认的控制台输出
   event.preventDefault()
-})
+}
 
-// 全局资源加载错误监听
-window.addEventListener('error', (event) => {
-  if (event.target && (event.target as HTMLElement).tagName) {
-    console.error('[资源加载错误]', {
-      element: (event.target as HTMLElement).tagName,
-      source: (event.target as HTMLElement).getAttribute('src'),
-      timestamp: new Date().toISOString()
-    })
-  }
-}, true)
+// 注册全局事件监听器
+window.addEventListener('error', handleGlobalError)
+eventListeners.push({ target: window, type: 'error', listener: handleGlobalError })
+
+window.addEventListener('unhandledrejection', handleUnhandledRejection)
+eventListeners.push({ target: window, type: 'unhandledrejection', listener: handleUnhandledRejection })
 
 app.mount('#app')
 
 console.log('[应用初始化] 错误处理系统已启动')
 console.log('[应用初始化] 应用程序已挂载')
+
+// 在应用卸载时清理事件监听器
+if (import.meta.hot) {
+  import.meta.hot.dispose(() => {
+    console.log('[应用卸载] 清理事件监听器...')
+    eventListeners.forEach(({ target, type, listener }) => {
+      target.removeEventListener(type, listener)
+    })
+    console.log('[应用卸载] 事件监听器已清理')
+  })
+}

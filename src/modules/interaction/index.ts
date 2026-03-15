@@ -225,7 +225,7 @@ export class TouchInteraction {
    */
 export class GestureHandler {
   /** Hammer.js 手势管理器 */
-  private hammer!: any
+  private hammer!: Hammer.Manager
   /** 目标旋转角度 */
   private targetRotation: THREE.Vector2
   /** 旋转回调函数 */

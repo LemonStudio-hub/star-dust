@@ -1,4 +1,3 @@
-
 import { MotionMode } from '../modules/particles/MotionMode'
 import type { ColorTheme } from '../modules/colors/ColorTheme'
 
@@ -16,6 +15,53 @@ export const defaultConfig = {
   parallaxStrength: 1.0,
   enableFog: true,
   fogDensity: 0.01
+}
+
+/**
+ * 粒子配置接口
+ */
+export interface ParticleConfigType {
+  particleCount: number
+  particleSize: number
+  boundsRadius: number
+  velocityScale: number
+  maxSpeed: number
+  enableSpeedBasedSize: boolean
+  speedBasedSizeFactor: number
+  parallaxStrength: number
+  enableFog: boolean
+  fogDensity: number
+}
+
+/**
+ * 泛光配置接口
+ */
+export interface BloomConfigType {
+  enabled: boolean
+  strength: number
+  radius: number
+  threshold: number
+}
+
+/**
+ * 发光配置接口
+ */
+export interface GlowConfigType {
+  enabled: boolean
+  intensity: number
+}
+
+/**
+ * 运动配置接口
+ */
+export interface MotionConfigType {
+  mode: MotionMode
+  lorenz: { sigma: number; rho: number; beta: number }
+  thomas: { b: number }
+  clifford: { a: number; b: number; c: number; d: number }
+  rossler: { a: number; b: number; c: number }
+  timeScale: number
+  particleScale: number
 }
 
 /**
@@ -61,17 +107,17 @@ export interface StoredConfig {
 const STORAGE_KEY = 'xingchen-particle-config'
 
 /**
- * 配置存储管理 Hook
+ * 配置存储 Hook
  */
 export function useConfigStorage() {
   /**
    * 保存配置到 localStorage
    */
   const saveConfigToStorage = (
-    particleConfig: any,
-    bloomConfig: any,
-    glowConfig: any,
-    motionConfig: any,
+    particleConfig: ParticleConfigType,
+    bloomConfig: BloomConfigType,
+    glowConfig: GlowConfigType,
+    motionConfig: MotionConfigType,
     currentTheme: ColorTheme
   ): void => {
     try {
@@ -94,10 +140,10 @@ export function useConfigStorage() {
    * 从 localStorage 加载配置
    */
   const loadConfigFromStorage = (
-    particleConfig: any,
-    bloomConfig: any,
-    glowConfig: any,
-    motionConfig: any,
+    particleConfig: ParticleConfigType,
+    bloomConfig: BloomConfigType,
+    glowConfig: GlowConfigType,
+    motionConfig: MotionConfigType,
     presetThemes: ColorTheme[]
   ): { success: boolean; theme?: ColorTheme } => {
     try {
@@ -109,7 +155,7 @@ export function useConfigStorage() {
         // 恢复粒子配置
         Object.keys(particleConfig).forEach(key => {
           if (config[key] !== undefined) {
-            (particleConfig as any)[key] = config[key]
+            (particleConfig as unknown as Record<string, unknown>)[key] = config[key]
           }
         })
 
@@ -117,7 +163,7 @@ export function useConfigStorage() {
         if (config.bloom) {
           Object.keys(bloomConfig).forEach(key => {
             if (config.bloom[key] !== undefined) {
-              (bloomConfig as any)[key] = config.bloom[key]
+              (bloomConfig as unknown as Record<string, unknown>)[key] = config.bloom[key]
             }
           })
         }
@@ -126,7 +172,7 @@ export function useConfigStorage() {
         if (config.glow) {
           Object.keys(glowConfig).forEach(key => {
             if (config.glow[key] !== undefined) {
-              (glowConfig as any)[key] = config.glow[key]
+              (glowConfig as unknown as Record<string, unknown>)[key] = config.glow[key]
             }
           })
         }
@@ -142,7 +188,7 @@ export function useConfigStorage() {
                   motionConfig[key] = modeValue as MotionMode
                 }
               } else {
-                (motionConfig as any)[key] = config.motion[key]
+                (motionConfig as unknown as Record<string, unknown>)[key] = config.motion[key]
               }
             }
           })

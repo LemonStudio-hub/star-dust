@@ -123,3 +123,56 @@ export const PARTICLE = {
   /** 粒子材质透明度 */
   OPACITY: 0.9
 } as const
+/**
+ * 时间步长相关常量
+ */
+export const TIME_STEP = {
+  /** 默认时间步长（秒） */
+  DEFAULT: 0.001,
+  /** 时间转换因子 */
+  SCALE: 1000
+} as const
+
+/**
+ * 混合模式相关常量
+ */
+export const HYBRID = {
+  /** 吸引子影响比例（0-1） */
+  ATTRACTOR_RATIO: 0.3,
+  /** 噪声场影响比例（0-1） */
+  NOISE_RATIO: 0.7
+} as const
+
+/**
+ * 速度初始化相关常量
+ */
+export const VELOCITY_INIT = {
+  /** 最小初始速度 */
+  MIN: 0.01,
+  /** 最大初始速度 */
+  MAX: 0.04,
+  /** Z 轴速度范围 */
+  Z_RANGE: 0.05
+} as const
+
+/**
+ * 吸引子重置相关常量
+ */
+export const ATTRACTOR_RESET = {
+  /** 重置半径 */
+  RADIUS: 5,
+  /** Z 轴重置范围 */
+  Z_RANGE: 2
+} as const
+
+/**
+ * 颜色亮度相关常量
+ */
+export const COLOR_BRIGHTNESS = {
+  /** 最小亮度因子 */
+  MIN: 0.7,
+  /** 最大亮度因子 */
+  MAX: 1.0,
+  /** 亮度随机范围 */
+  RANGE: 0.3
+} as const
