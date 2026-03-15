@@ -9,6 +9,33 @@
 /**
  * 粒子配置默认值
  */
+/**
+ * 统一应用配置模块
+ *
+ * 集中管理所有应用级别的配置常量。
+ * 使用这些常量可以确保配置的一致性和可维护性。
+ *
+ * @module config/AppConfig
+ *
+ * @example
+ * ```typescript
+ * import { PARTICLE_CONFIG, RENDERER_CONFIG, PERFORMANCE_CONFIG } from '@/config/AppConfig'
+ *
+ * // 使用粒子配置
+ * const particleCount = PARTICLE_CONFIG.COUNT
+ * const particleSize = PARTICLE_CONFIG.SIZE
+ *
+ * // 使用渲染器配置
+ * const maxPixelRatio = RENDERER_CONFIG.MAX_PIXEL_RATIO
+ * const fov = RENDERER_CONFIG.FIELD_OF_VIEW
+ * ```
+ */
+
+/**
+ * 粒子配置常量
+ *
+ * 控制粒子的数量、大小、边界等基本属性。
+ */
 export const PARTICLE_CONFIG = {
   /** 粒子数量 */
   COUNT: 40000,

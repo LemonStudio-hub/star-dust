@@ -23,6 +23,29 @@ export interface ParticleInitConfig {
  * @param positions - 粒子位置数组
  * @param config - 初始化配置
  */
+/**
+ * 初始化粒子位置
+ *
+ * 根据模式在球体内随机分布粒子位置。
+ * - 吸引子模式: 在中心附近小范围随机分布
+ * - 噪声场模式: 在整个球体内随机分布
+ *
+ * @param positions - 粒子位置数组 (Float32Array, 长度为 count * 3)
+ * @param config - 初始化配置
+ * @param config.count - 粒子数量
+ * @param config.boundsRadius - 边界半径
+ * @param config.isAttractorMode - 是否为吸引子模式
+ *
+ * @example
+ * ```typescript
+ * const positions = new Float32Array(40000 * 3)
+ * initializeParticlePositions(positions, {
+ *   count: 40000,
+ *   boundsRadius: 60,
+ *   isAttractorMode: false
+ * })
+ * ```
+ */
 export function initializeParticlePositions(
   positions: Float32Array,
   config: ParticleInitConfig
