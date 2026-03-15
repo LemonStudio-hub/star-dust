@@ -13,6 +13,7 @@ import { ColorManager } from '../colors/ColorManager'
 import { ColorTheme, DefaultColorTheme } from '../colors/ColorTheme'
 import { TrailManager, TrailConfig } from './TrailManager'
 import { MotionMode, AttractorConfig, DEFAULT_ATTRACTOR_CONFIG } from './MotionMode'
+import { AttractorFactory } from '../attractors/AttractorFactory'
 
 /**
  * 粒子系统配置接口
@@ -190,6 +191,10 @@ export class ParticleSystem {
     // 初始化运动模式和吸引子配置
     this.motionMode = config.motionMode ?? MotionMode.NOISE_FIELD
     this.attractorConfig = config.attractorConfig ?? DEFAULT_ATTRACTOR_CONFIG
+
+    // 同步更新 config 中的运动模式和吸引子配置
+    this.config.motionMode = this.motionMode
+    this.config.attractorConfig = this.attractorConfig
 
     this.points = this.create(useDefaultColor)
     scene.add(this.points)
@@ -756,14 +761,24 @@ export class ParticleSystem {
       
       let attractorVel: {dx: number, dy: number, dz: number}
       
-      // 根据配置选择吸引子类型
-      if (this.attractorConfig.lorenz) {
-        attractorVel = this.calculateLorenz(scaledX, scaledY, scaledZ, dt)
-      } else if (this.attractorConfig.thomas) {
-        attractorVel = this.calculateThomas(scaledX, scaledY, scaledZ, dt)
-      } else {
-        // 默认使用 Lorenz
-        attractorVel = this.calculateLorenz(scaledX, scaledY, scaledZ, dt)
+      // 根据 motionMode 选择吸引子类型
+      switch (this.attractorConfig.motionMode) {
+        case MotionMode.LORENZ:
+          attractorVel = this.calculateLorenz(scaledX, scaledY, scaledZ, dt)
+          break
+        case MotionMode.THOMAS:
+          attractorVel = this.calculateThomas(scaledX, scaledY, scaledZ, dt)
+          break
+        case MotionMode.CLIFFORD:
+          attractorVel = this.calculateClifford(scaledX, scaledY, scaledZ, dt)
+          break
+        case MotionMode.ROSSLER:
+          attractorVel = this.calculateRossler(scaledX, scaledY, scaledZ, dt)
+          break
+        default:
+          // 默认使用 Lorenz
+          attractorVel = this.calculateLorenz(scaledX, scaledY, scaledZ, dt)
+          break
       }
       
       // 混合噪声场和吸引子速度
@@ -806,10 +821,67 @@ export class ParticleSystem {
   }
 
   /**
+   * 重新初始化粒子位置
+   *
+   * 根据当前运动模式重新初始化所有粒子的位置和速度。
+   * 吸引子模式初始化在中心附近，噪声场模式在球体内随机分布。
+   *
+   * @private
+   */
+  private reinitializeParticles(): void {
+    if (!this.positions || !this.velocities) {
+      return
+    }
+
+    const isAttractorMode = this.motionMode === MotionMode.LORENZ ||
+                            this.motionMode === MotionMode.THOMAS ||
+                            this.motionMode === MotionMode.CLIFFORD ||
+                            this.motionMode === MotionMode.ROSSLER ||
+                            this.motionMode === MotionMode.HYBRID
+
+    for (let i = 0; i < this.config.count; i++) {
+      const i3 = i * 3
+
+      if (isAttractorMode) {
+        // 吸引子模式：初始化在中心附近
+        const angle = Math.random() * Math.PI * 2
+        const radius = Math.random() * 5
+        this.positions[i3] = radius * Math.cos(angle)
+        this.positions[i3 + 1] = radius * Math.sin(angle)
+        this.positions[i3 + 2] = Math.random() * 2 - 1
+
+        // 重置速度
+        this.velocities[i3] = 0
+        this.velocities[i3 + 1] = 0
+        this.velocities[i3 + 2] = 0
+      } else {
+        // 噪声场模式：在球体内随机分布
+        const radius = Math.random() * this.config.boundsRadius
+        const theta = Math.random() * Math.PI * 2
+        const phi = Math.acos(2 * Math.random() - 1)
+
+        this.positions[i3] = radius * Math.sin(phi) * Math.cos(theta)
+        this.positions[i3 + 1] = radius * Math.sin(phi) * Math.sin(theta)
+        this.positions[i3 + 2] = radius * Math.cos(phi)
+
+        // 随机初始速度
+        const angle = Math.random() * Math.PI * 2
+        const speed = 0.01 + Math.random() * 0.03
+        this.velocities[i3] = Math.cos(angle) * speed
+        this.velocities[i3 + 1] = Math.sin(angle) * speed
+        this.velocities[i3 + 2] = (Math.random() - 0.5) * speed
+      }
+    }
+
+    // 标记位置属性需要更新
+    this.points.geometry.attributes.position.needsUpdate = true
+  }
+
+  /**
    * 检查边界条件
-   * 
+   *
    * 当粒子超出边界时，重置到中心区域。
-   * 
+   *
    * @param i - 粒子索引（起始位置）
    * @private
    */
@@ -1292,6 +1364,44 @@ export class ParticleSystem {
         if (this.points.material instanceof THREE.ShaderMaterial) {
           this.points.material.uniforms.uGlowIntensity.value = this.glowIntensity
         }
+      }
+
+      // 保存原始运动模式，用于后续比较
+      const originalMotionMode = this.motionMode
+
+      // 更新运动模式
+      if (config.motionMode !== undefined) {
+        this.motionMode = config.motionMode
+        // 同步更新 attractorConfig 中的 motionMode
+        this.attractorConfig.motionMode = config.motionMode
+        // 同步更新 config 中的 motionMode
+        this.config.motionMode = config.motionMode
+      }
+
+      // 更新吸引子配置
+      if (config.attractorConfig !== undefined) {
+        // 深度合并，避免覆盖嵌套对象
+        this.attractorConfig = {
+          motionMode: config.attractorConfig.motionMode ?? this.attractorConfig.motionMode,
+          lorenz: config.attractorConfig.lorenz ? { ...this.attractorConfig.lorenz, ...config.attractorConfig.lorenz } : this.attractorConfig.lorenz,
+          thomas: config.attractorConfig.thomas ? { ...this.attractorConfig.thomas, ...config.attractorConfig.thomas } : this.attractorConfig.thomas,
+          clifford: config.attractorConfig.clifford ? { ...this.attractorConfig.clifford, ...config.attractorConfig.clifford } : this.attractorConfig.clifford,
+          rossler: config.attractorConfig.rossler ? { ...this.attractorConfig.rossler, ...config.attractorConfig.rossler } : this.attractorConfig.rossler,
+          timeScale: config.attractorConfig.timeScale ?? this.attractorConfig.timeScale,
+          particleScale: config.attractorConfig.particleScale ?? this.attractorConfig.particleScale
+        }
+        // 同步更新 config 中的 attractorConfig
+        this.config.attractorConfig = this.attractorConfig
+        // 更新运动模式（如果 attractorConfig 中包含 motionMode）
+        if (config.attractorConfig.motionMode !== undefined) {
+          this.motionMode = config.attractorConfig.motionMode
+          this.config.motionMode = config.attractorConfig.motionMode
+        }
+      }
+
+      // 如果运动模式改变了，重新初始化粒子位置
+      if (originalMotionMode !== this.motionMode && this.positions && this.velocities) {
+        this.reinitializeParticles()
       }
     } catch (error) {
       console.error('更新粒子系统配置时发生错误:', error)

@@ -459,6 +459,10 @@ export class GPGUParticleSystem {
     this.motionMode = config.motionMode ?? MotionMode.NOISE_FIELD
     this.attractorConfig = config.attractorConfig ?? DEFAULT_ATTRACTOR_CONFIG
 
+    // 同步更新 config 中的运动模式和吸引子配置
+    this.config.motionMode = this.motionMode
+    this.config.attractorConfig = this.attractorConfig
+
     // 初始化 GPU 计算渲染器
     const textureWidth = Math.ceil(Math.sqrt(config.count))
     const textureHeight = Math.ceil(config.count / textureWidth)
@@ -1363,6 +1367,10 @@ export class GPGUParticleSystem {
       // 更新运动模式
       if (config.motionMode !== undefined) {
         this.motionMode = config.motionMode
+        // 同步更新 attractorConfig 中的 motionMode
+        this.attractorConfig.motionMode = config.motionMode
+        // 同步更新 config 中的 motionMode
+        this.config.motionMode = config.motionMode
         if (this.positionVariable) {
           const modeValue = this.getMotionModeValue(this.motionMode)
           this.positionVariable.material.uniforms.uMotionMode.value = modeValue
@@ -1371,8 +1379,26 @@ export class GPGUParticleSystem {
 
       // 更新吸引子配置
       if (config.attractorConfig !== undefined) {
-        this.attractorConfig = { ...this.attractorConfig, ...config.attractorConfig }
+        // 深度合并，避免覆盖嵌套对象
+        this.attractorConfig = {
+          motionMode: config.attractorConfig.motionMode ?? this.attractorConfig.motionMode,
+          lorenz: config.attractorConfig.lorenz ? { ...this.attractorConfig.lorenz, ...config.attractorConfig.lorenz } : this.attractorConfig.lorenz,
+          thomas: config.attractorConfig.thomas ? { ...this.attractorConfig.thomas, ...config.attractorConfig.thomas } : this.attractorConfig.thomas,
+          clifford: config.attractorConfig.clifford ? { ...this.attractorConfig.clifford, ...config.attractorConfig.clifford } : this.attractorConfig.clifford,
+          rossler: config.attractorConfig.rossler ? { ...this.attractorConfig.rossler, ...config.attractorConfig.rossler } : this.attractorConfig.rossler,
+          timeScale: config.attractorConfig.timeScale ?? this.attractorConfig.timeScale,
+          particleScale: config.attractorConfig.particleScale ?? this.attractorConfig.particleScale
+        }
+        // 同步更新 config 中的 attractorConfig
+        this.config.attractorConfig = this.attractorConfig
         if (this.positionVariable) {
+          // 更新运动模式（如果 attractorConfig 中包含 motionMode）
+          if (config.attractorConfig.motionMode !== undefined) {
+            this.motionMode = config.attractorConfig.motionMode
+            this.config.motionMode = config.attractorConfig.motionMode
+            const modeValue = this.getMotionModeValue(this.motionMode)
+            this.positionVariable.material.uniforms.uMotionMode.value = modeValue
+          }
           // 更新 Lorenz 参数
           if (this.attractorConfig.lorenz) {
             this.positionVariable.material.uniforms.uLorenzSigma.value = this.attractorConfig.lorenz.sigma ?? 10.0

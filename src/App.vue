@@ -1284,6 +1284,22 @@ onMounted(() => {
       } catch (themeError) {
         console.error('[App.vue] 设置主题失败:', themeError)
       }
+
+      // 初始化运动模式
+      try {
+        appManager.setMotionMode(motionConfig.mode)
+        appManager.setAttractorParams({
+          lorenz: motionConfig.lorenz,
+          thomas: motionConfig.thomas,
+          clifford: motionConfig.clifford,
+          rossler: motionConfig.rossler,
+          timeScale: motionConfig.timeScale,
+          particleScale: motionConfig.particleScale
+        })
+        console.log('[App.vue] 运动模式初始化成功:', motionConfig.mode)
+      } catch (motionError) {
+        console.error('[App.vue] 设置运动模式失败:', motionError)
+      }
     }
 
     // 添加点击事件监听

@@ -535,9 +535,15 @@ export class AppManager {
       cancelAnimationFrame(this.animationFrameId)
 
       // 清理旧资源（但不释放交互系统）
-      this.particleSystem.dispose(this.renderer.scene)
-      this.noiseTexture.dispose()
-      this.renderer.dispose()
+      if (this.particleSystem) {
+        this.particleSystem.dispose(this.renderer.scene)
+      }
+      if (this.noiseTexture) {
+        this.noiseTexture.dispose()
+      }
+      if (this.renderer) {
+        this.renderer.dispose()
+      }
 
       // 重新初始化
       this.initialize(this.savedConfig)
@@ -568,9 +574,15 @@ export class AppManager {
       this.savedConfig = minConfig
 
       // 清理资源
-      this.particleSystem.dispose(this.renderer.scene)
-      this.noiseTexture.dispose()
-      this.renderer.dispose()
+      if (this.particleSystem) {
+        this.particleSystem.dispose(this.renderer.scene)
+      }
+      if (this.noiseTexture) {
+        this.noiseTexture.dispose()
+      }
+      if (this.renderer) {
+        this.renderer.dispose()
+      }
 
       // 重新初始化
       this.initialize(minConfig)
@@ -1253,25 +1265,30 @@ export class AppManager {
   setAttractorParams(params: {
     lorenz?: { sigma?: number; rho?: number; beta?: number }
     thomas?: { b?: number }
+    clifford?: { a?: number; b?: number; c?: number; d?: number }
+    rossler?: { a?: number; b?: number; c?: number }
     timeScale?: number
     particleScale?: number
   }): void {
     try {
-      if (this.computeMode === ParticleComputeMode.GPU) {
-        this.particleSystem.updateConfig({
-          attractorConfig: {
-            ...params,
-            motionMode: this.particleSystem.getConfig().motionMode ?? MotionMode.NOISE_FIELD
-          } as AttractorConfig
-        })
-      } else {
-        this.particleSystem.updateConfig({
-          attractorConfig: {
-            ...params,
-            motionMode: this.particleSystem.getConfig().motionMode ?? MotionMode.NOISE_FIELD
-          } as AttractorConfig
-        })
+      const currentConfig = this.particleSystem.getConfig()
+      const currentAttractorConfig = currentConfig.attractorConfig ?? DEFAULT_ATTRACTOR_CONFIG
+      const currentMotionMode = currentConfig.motionMode ?? MotionMode.NOISE_FIELD
+
+      // 合并参数，只更新传入的参数
+      const newAttractorConfig: AttractorConfig = {
+        motionMode: currentMotionMode,
+        lorenz: params.lorenz ?? currentAttractorConfig.lorenz,
+        thomas: params.thomas ?? currentAttractorConfig.thomas,
+        clifford: params.clifford ?? currentAttractorConfig.clifford,
+        rossler: params.rossler ?? currentAttractorConfig.rossler,
+        timeScale: params.timeScale ?? currentAttractorConfig.timeScale,
+        particleScale: params.particleScale ?? currentAttractorConfig.particleScale
       }
+
+      this.particleSystem.updateConfig({
+        attractorConfig: newAttractorConfig
+      })
     } catch (error) {
       console.error('设置吸引子参数时发生错误:', error)
     }
